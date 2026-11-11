@@ -14,6 +14,7 @@ Base: **v0.15.2** (`2418d685eb91701827afead15ab08586c47db644`), the hub's versio
 - OkHttp runs no network interceptor for a **WebSocket upgrade**, so an application interceptor adds them to upgrade requests only,
   and every client that opens a socket follows **no redirect** (`DataClient.wsHttp`, `Hub`): an upgrade bounced elsewhere stops there.
 - `VoiceRecorder`'s `HttpURLConnection` uses the same check and stops following redirects when it sends them.
+- Value fields use a password keyboard (no suggestions, nothing learned by the keyboard).
 - Values are **write-only** in the UI and stored sealed with AES-GCM under an Android Keystore key (`backplane.edge`, prefs `edge`).
   Forgetting a hub removes its headers; Unpair removes all.
 - Opening a hub URL in the system browser (Intent.ACTION_VIEW) gets no headers: the browser passes Access's own login.
@@ -46,6 +47,10 @@ Hooks (one line each, `.apply(EdgeHeaders::wire)` on a client builder, or a call
 `EdgeHeadersTest` (JVM, real OkHttp over TLS): the hub gets them on HTTP and on the socket upgrade; another port or host, a redirect
 elsewhere, plain http get none; a socket redirect is not followed; a blank value keeps the saved one. Run the unit tests with an
 English JVM locale (`JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"`): three upstream tests fail under a Japanese one.
+
+On a device (2026-11-11, Pixel 3, a throwaway build trusting a test CA): pairing by short code against an https test server sent
+both headers on `POST /auth/enroll` and on the `/ws` upgrade; the upgrade's 302 to another port was not followed (that port saw
+nothing); `shared_prefs/edge.xml` held only the sealed blob, no value in clear.
 
 ## Rebasing on a new Backplane
 
