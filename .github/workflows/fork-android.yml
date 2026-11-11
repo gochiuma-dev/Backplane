@@ -1,0 +1,74 @@
+# Fork (cf-access, docs/FORK-CF-ACCESS.md): the Android app with edge proxy headers. Checks the catalog, runs the unit tests
+# (EdgeHeadersTest among them) and builds an APK. With the signing secrets set it is a release APK signed by the fork's own key,
+# so each build installs over the last; without them, a debug APK (a new key each run: uninstall before installing another).
+# The upstream workflows are disabled in this repository's Actions settings, not edited, so the patch stays small.
+name: fork-android
+on:
+  push:
+    branches: [cf-access]
+    tags: ['v*-cf.*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # a tag push attaches the APK to its release
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      LC_ALL: C.UTF-8
+      JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
+      # the fork's id, scheme and launcher name: it installs beside the official app
+      APP_ID: dev.backplane.mobile.gochiuma
+      APP_SCHEME: bpgochiuma
+      APP_NAME: Backplane CF
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the upstream tag names the version
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: catalog and copy checks
+        run: python3 scripts/i18n-check.py && python3 scripts/i18n-android.py --check && python3 scripts/check-android-i18n.py
+      - name: unit tests
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon testDebugUnitTest -Pbp.appId="$APP_ID" -Pbp.scheme="$APP_SCHEME" -Pbp.appName="$APP_NAME"
+      - name: version
+        id: v
+        run: |
+          base=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-cf.*' --abbrev=0 | sed 's/^v//')
+          if [[ "$GITHUB_REF" == refs/tags/v*-cf.* ]]; then name=${GITHUB_REF#refs/tags/v}; else name="$base-cf.ci$GITHUB_RUN_NUMBER"; fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$((1000000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+      - name: build (signed with the fork's key)
+        if: ${{ env.HAS_KEY == 'true' }}
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BACKPLANE_ANDROID_VERSION_NAME: ${{ steps.v.outputs.name }}
+          BACKPLANE_ANDROID_VERSION_CODE: ${{ steps.v.outputs.code }}
+        run: |
+          export BACKPLANE_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/fork.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$BACKPLANE_ANDROID_KEYSTORE_PATH"
+          ./gradlew --no-daemon assembleRelease -Pbp.appId="$APP_ID" -Pbp.scheme="$APP_SCHEME" -Pbp.appName="$APP_NAME"
+          rm -f "$BACKPLANE_ANDROID_KEYSTORE_PATH"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/backplane-cf-${{ steps.v.outputs.name }}.apk"
+      - name: build (debug, no key set)
+        if: ${{ env.HAS_KEY != 'true' }}
+        working-directory: mobile/android
+        run: |
+          ./gradlew --no-daemon assembleDebug -Pbp.appId="$APP_ID" -Pbp.scheme="$APP_SCHEME" -Pbp.appName="$APP_NAME"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/backplane-cf-${{ steps.v.outputs.name }}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backplane-cf-${{ steps.v.outputs.name }}
+          path: ${{ runner.temp }}/backplane-cf-*.apk
+      - name: release (tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/backplane-cf-*.apk --title "$GITHUB_REF_NAME" --notes "Android with edge proxy headers (docs/FORK-CF-ACCESS.md)."
