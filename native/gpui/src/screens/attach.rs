@@ -33,8 +33,8 @@ pub fn enc(s: &str) -> String {
 
 /// The request head of a POST /attach.
 pub fn head(t: &Target, thread: &str, key: &str, name: &str, len: u64) -> String {
-    /* i18n-ok: an HTTP request */ format!("POST /attach?thread={}&key={}&name={}&token={} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        enc(thread), enc(key), enc(name), t.token, t.addr, len)
+    /* i18n-ok: an HTTP request */ format!("POST /attach?thread={}&key={}&name={}&token={} HTTP/1.1\r\nHost: {}\r\n{}Content-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        enc(thread), enc(key), enc(name), t.token, t.addr, crate::edge::lines(&t.addr, t.tls), len)   // fork (cf-access): {} the edge headers
 }
 
 /// The body of an HTTP response, de-chunked when the reply is `Transfer-Encoding: chunked`.
