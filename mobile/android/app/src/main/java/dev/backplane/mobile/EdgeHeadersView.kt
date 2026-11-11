@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +34,9 @@ internal fun EdgeRows(rows: List<EdgeHeaders.H>, saved: Set<String>, onChange: (
         Box(Modifier.fillMaxWidth().background(dview).border(BorderStroke(1.dp, dcs.outlineVariant)).padding(horizontal = 10.dp, vertical = 10.dp)) {
             if (r.value.isEmpty()) Text(if (r.name.trim().lowercase() in saved) Msg.fork_edge_kept else Msg.fork_edge_value, color = dfaint, fontFamily = BpMono, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicTextField(r.value, { v -> onChange(rows.toMutableList().also { it[i] = r.copy(value = v) }) }, textStyle = TextStyle(color = dcs.onSurface, fontFamily = BpMono, fontSize = 13.sp),
-                cursorBrush = SolidColor(dcs.primary), singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("edge.value.$i"))
+                cursorBrush = SolidColor(dcs.primary), singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                // a secret: the keyboard neither suggests nor learns it
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth().testTag("edge.value.$i"))
         }
         Spacer(Modifier.height(8.dp))
     }
