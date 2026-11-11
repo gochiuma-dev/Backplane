@@ -1,0 +1,78 @@
+# Fork (cf-access, docs/FORK-CF-ACCESS.md): the desktop client (native/gpui) with edge proxy headers. The client's tests on Linux
+# (native/gpui/src/edge.rs among them), then backplane-gpui.exe for Windows built as the release builds it (feature cef), as an artifact
+# (a cf-v* tag also puts it on that release). It replaces backplane-gpui.exe in an install of the same upstream version.
+name: fork-desktop
+on:
+  push:
+    branches: [cf-access]
+    tags: ['cf-v*']
+    paths: ['native/gpui/**', '.github/workflows/fork-desktop.yml']
+  pull_request:
+    paths: ['native/gpui/**', '.github/workflows/fork-desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # a tag push attaches the exe to its release
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
+      - name: system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libxkbcommon-x11-dev libxcb1-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev libasound2-dev libwayland-dev libvulkan-dev
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native/gpui, shared-key: fork-gpui-linux }
+      - name: tests
+        working-directory: native/gpui
+        run: cargo test --locked --bin backplane-gpui
+
+  windows:
+    needs: tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the upstream tag names the version
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native/gpui, shared-key: fork-gpui-windows }
+      # the cef crate builds CEF's small C++ wrapper with CMake and Ninja (docs/browser-gpui-cef.md)
+      - run: choco install ninja -y --no-progress
+      - name: version
+        id: v
+        run: |
+          base=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null | sed 's/^v//; s/-.*//')
+          if [[ "$GITHUB_REF" == refs/tags/cf-v* ]]; then name=${GITHUB_REF#refs/tags/cf-v}; else name="${base:-0.0.0}-cf.ci$GITHUB_RUN_NUMBER"; fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "base=${base:-0.0.0}" >> "$GITHUB_OUTPUT"
+      # as release.yml stamps it: the client's own version (install.rs tag()) is the upstream one it sits beside, not the fork's suffix
+      - name: stamp the version
+        run: python3 -c 'import re,sys; p="native/gpui/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.base }}"
+      - name: build
+        working-directory: native/gpui
+        run: cargo build --release --features cef
+      - name: package
+        run: |
+          d="$RUNNER_TEMP/backplane-gpui-${{ steps.v.outputs.name }}-windows-x64"; mkdir -p "$d"
+          cp native/gpui/target/release/backplane-gpui.exe "$d/"
+          cp docs/FORK-CF-ACCESS.md "$d/"
+          (cd "$d" && sha256sum backplane-gpui.exe > SHA256SUMS)
+          (cd "$RUNNER_TEMP" && 7z a -tzip "backplane-gpui-${{ steps.v.outputs.name }}-windows-x64.zip" "$(basename "$d")" > /dev/null)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backplane-gpui-${{ steps.v.outputs.name }}-windows-x64
+          path: ${{ runner.temp }}/backplane-gpui-${{ steps.v.outputs.name }}-windows-x64/
+      - name: release (tag push)
+        if: startsWith(github.ref, 'refs/tags/cf-v')
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          z="$RUNNER_TEMP/backplane-gpui-${{ steps.v.outputs.name }}-windows-x64.zip"
+          gh release upload "$GITHUB_REF_NAME" "$z" --clobber || gh release create "$GITHUB_REF_NAME" "$z" --title "$GITHUB_REF_NAME" --notes "Edge proxy headers (docs/FORK-CF-ACCESS.md)." || gh release upload "$GITHUB_REF_NAME" "$z" --clobber

@@ -173,6 +173,8 @@ async fn session(config:&Config,commands:&mut mpsc::Receiver<Command>,events:&as
     /* i18n-ok: connection errors, logged as GPUI_LOG disconnect */ ensure!(token.trim().chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_'),"invalid token file");
     let url=format!("{}/ws?view=1&mobile=1&token={}",config.hub.trim_end_matches('/'),token.trim());
     let limits=WebSocketConfig::default().max_message_size(Some(64<<20)).max_frame_size(Some(64<<20));
+    // fork (cf-access): an edge proxy's headers on the upgrade (edge.rs); the socket follows no redirect
+    let mut url=tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(url)?;for (n,v) in crate::edge::for_url(&config.hub) {url.headers_mut().insert(tokio_tungstenite::tungstenite::http::HeaderName::from_bytes(n.as_bytes())?,tokio_tungstenite::tungstenite::http::HeaderValue::from_str(&v)?);}
     let (socket,_)=tokio::time::timeout(Duration::from_secs(5),tokio_tungstenite::connect_async_with_config(url,Some(limits),true)).await??;
     let (mut sink,mut source)=socket.split();let mut last=tokio::time::Instant::now();
     let mut heartbeat=tokio::time::interval(Duration::from_secs(10));

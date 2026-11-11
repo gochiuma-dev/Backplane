@@ -55,7 +55,7 @@ fn call(t: &Target, method: &str, path: &str, token: &str, body: &str) -> Option
     let a = addr.to_socket_addrs().ok()?.next()?; let d = Duration::from_secs(5);
     let tcp = TcpStream::connect_timeout(&a, d).ok()?; tcp.set_read_timeout(Some(d)).ok()?; tcp.set_write_timeout(Some(d)).ok()?;
     let mut s = crate::pairing::wrap(addr, tcp, t.tls).ok()?;
-    /* i18n-ok: HTTP */ s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).ok()?;
+    /* i18n-ok: HTTP */ s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{}Authorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", crate::edge::lines(addr, t.tls), body.len()).as_bytes()).ok()?;   // fork (cf-access): the edge headers
     let mut out = Vec::new(); let _ = s.take(1 << 20).read_to_end(&mut out);
     let text = String::from_utf8_lossy(&out);
     Some((text.split_whitespace().nth(1)?.parse().ok()?, text.split_once("\r\n\r\n").map_or(String::new(), |x| x.1.to_string())))

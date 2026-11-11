@@ -135,8 +135,8 @@ pub fn name() -> String {
     /* i18n-ok: the device name sent to the hub */ if host.is_empty() { format!("{os} desktop") } else { format!("{os} desktop - {host}") }
 }
 pub fn enroll_request(i: &Invitation, name: &str) -> String {
-    let (addr, _) = host_port(&i.origin);
-    /* i18n-ok: an HTTP request */ format!("POST /auth/enroll HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {}\r\nX-Backplane-Client: native\r\nX-Backplane-Name: {name}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", i.secret)
+    let (addr, tls) = host_port(&i.origin); let edge = crate::edge::lines(&addr, tls);   // fork (cf-access)
+    /* i18n-ok: an HTTP request */ format!("POST /auth/enroll HTTP/1.1\r\nHost: {addr}\r\n{edge}Authorization: Bearer {}\r\nX-Backplane-Client: native\r\nX-Backplane-Name: {name}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", i.secret)
 }
 /// The credential in the hub's answer, or what to say. Only a 200 counts: a redirect is never followed, so a link cannot send the secret on.
 pub fn enroll_answer(status: u16, body: &[u8]) -> Result<String, String> {

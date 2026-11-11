@@ -15,6 +15,7 @@ mod launch;
 mod install;
 mod local;
 mod pairing;
+mod edge;   // fork (cf-access): edge proxy headers
 mod hubs;
 mod perf;
 mod part;

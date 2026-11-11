@@ -38,7 +38,7 @@ pub fn get_bytes(url: &str, token: &str, timeout: Duration, max: u64) -> Result<
     let (addr, tls) = crate::pairing::host_port(&format!("{}://{}", authority.0, authority.1));
     let path = url.split_once("://").map_or(url, |(_, r)| r).split_once('/').map_or("/".to_string(), |(_, p)| format!("/{p}"));
     let mut s = crate::pairing::open(&addr, tls).map_err(|e| e.to_string())?; s.set_timeouts(timeout).map_err(|e| e.to_string())?;
-    /* i18n-ok: an HTTP request */ std::io::Write::write_all(&mut s, format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n\r\n").as_bytes()).map_err(|e| e.to_string())?;
+    /* i18n-ok: an HTTP request */ std::io::Write::write_all(&mut s, format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\n{}Authorization: Bearer {token}\r\nConnection: close\r\n\r\n", crate::edge::lines(&addr, tls)).as_bytes()).map_err(|e| e.to_string())?;
     let mut raw = Vec::new();
     let _ = std::io::Read::read_to_end(&mut std::io::Read::take(&mut s, max + 8192), &mut raw); // (a TLS close without notice after the body is still a body)
     parse_response(&raw)

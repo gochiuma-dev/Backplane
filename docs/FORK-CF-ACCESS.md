@@ -1,6 +1,6 @@
-# Fork: edge proxy headers on Android (cf-access)
+# Fork: edge proxy headers on Android and the desktop client (cf-access)
 
-A private fork of Backplane (MIT, github.com/i2cjak/Backplane) whose only change is letting the Android app send extra headers
+A fork of Backplane (MIT, github.com/i2cjak/Backplane) whose only change is letting the Android app and the desktop client (Windows, Linux, macOS) send extra headers
 to a hub behind an access proxy, such as Cloudflare Access with a service token (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).
 The native app cannot pass Access's browser login, so it sends the token instead. Backplane's own `Authorization: Bearer` is untouched.
 
@@ -52,6 +52,30 @@ Checked on a device with a build trusting a test CA: pairing by short code again
 `POST /auth/enroll` and on the `/ws` upgrade; the upgrade's 302 to another port was not followed (that port saw nothing);
 `shared_prefs/edge.xml` held only the sealed blob, no value in clear.
 
+## Desktop client (native/gpui)
+
+The same rule in `native/gpui/src/edge.rs`: only over TLS, only to that host and port, on the hub socket's upgrade (`hub.rs`) and on every
+hand-written request to the hub (pairing's `/auth/enroll`, attachments, images, the hub bar, the browser's frames). None of them follows a
+redirect. There is no screen for them yet: they are read once at start from **`edge-headers.json`** in the client's settings folder
+(Windows `%APPDATA%\backplane-gpui\`, Linux `~/.config/backplane-gpui/`; `BACKPLANE_GPUI_EDGE` names another file):
+
+```json
+{"backplane.example.net": {"CF-Access-Client-Id": "….access", "CF-Access-Client-Secret": "…"}}
+```
+
+A key without a port is `:443`. The client makes the file private to the user (on Windows an ACL for the user only, as for the hub token)
+when it reads it; it never logs the values. A malformed name or value drops that header. Restart the client after editing it.
+Pair with the address written `https://…` (a bare host is http and gets nothing). Dictation's upload from this machine
+(`voice_mic.rs`) speaks plain TCP only and does not reach an https hub, with or without this fork.
+
+Hooks: `main.rs` (`mod edge`), `hub.rs` (the upgrade request), `pairing.rs` (`enroll_request`), `screens/attach.rs` (`head`),
+`screens/hubbar.rs` (`call`), `screens/images.rs` (`request`), `viewers/browser.rs` (`get_bytes`): one line each.
+
+`.github/workflows/fork-desktop.yml` runs the client's tests on Linux, then builds `backplane-gpui.exe` for Windows as the release does
+(`--features cef`, the version stamped to the upstream one). To use it, quit Backplane and replace `backplane-gpui.exe` in the install
+of the **same upstream version** (`%LOCALAPPDATA%\Backplane\builds\<version>\`); the CEF runtime beside it stays. An update of
+Backplane puts the upstream exe back.
+
 ## Rebasing on a new Backplane
 
 ```sh
@@ -61,7 +85,8 @@ python3 scripts/i18n-android.py               # regenerate Msg.kt instead of res
 ```
 
 Check that every `OkHttpClient` in `mobile/android/app/src/main/java/dev/backplane/mobile/` still has the interceptor:
-`grep -n "OkHttpClient\|openConnection" mobile/android/app/src/main/java/dev/backplane/mobile/*.kt`.
+`grep -n "OkHttpClient\|openConnection" mobile/android/app/src/main/java/dev/backplane/mobile/*.kt`,
+and that every request the desktop client writes by hand to a hub still carries `edge::lines`: `grep -rn 'HTTP/1.1' native/gpui/src`.
 
 ## Build
 
