@@ -80,6 +80,12 @@ Hooks: `screens/pair.rs` (the form's section, saved in `pair()`), `input.rs` (`s
 of the **same upstream version** (`%LOCALAPPDATA%\Backplane\builds\<version>\`); the CEF runtime beside it stays. An update of
 Backplane puts the upstream exe back.
 
+## Japanese in mono text on Windows
+
+Not about headers, but carried here: on Windows the bundled JetBrains Mono (`art.rs` `mono_font()`, used by the terminal, code and tool
+lines) got no system fallback, so Japanese came out as boxes. `mono_fallbacks()` names faces Windows ships (BIZ UDGothic, MS Gothic,
+Yu Gothic, Meiryo), after which DirectWrite's own system fallback still applies. Other platforms are as upstream.
+
 ## Rebasing on a new Backplane
 
 ```sh

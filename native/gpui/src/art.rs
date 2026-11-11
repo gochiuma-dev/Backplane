@@ -205,7 +205,12 @@ pub fn load_fonts(cx: &mut App) {
 }
 /// JetBrains Mono with ligatures (calt) off; CJK and anything it lacks falls back to the system font.
 pub fn mono_font() -> Font {
-    Font { family: MONO.into(), features: FontFeatures::disable_ligatures(), fallbacks: None, weight: FontWeight::NORMAL, style: FontStyle::Normal }
+    Font { family: MONO.into(), features: FontFeatures::disable_ligatures(), fallbacks: mono_fallbacks(), weight: FontWeight::NORMAL, style: FontStyle::Normal }
+}
+/// fork (cf-access): on Windows the bundled face gets no system fallback of its own (Japanese came out as boxes), so DirectWrite is
+/// given Japanese faces Windows ships, then its system fallback (vendor/gpui direct_write.rs generate_font_fallbacks). Elsewhere as upstream.
+fn mono_fallbacks() -> Option<FontFallbacks> {
+    /* i18n-ok: font names */ if cfg!(windows) { Some(FontFallbacks::from_fonts(["BIZ UDGothic", "MS Gothic", "Yu Gothic", "Meiryo"].map(String::from).to_vec())) } else { None }
 }
 
 // ---- generated assets (cat rigs, icons): found beside the binary, loud when missing --------------------
