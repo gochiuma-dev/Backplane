@@ -48,9 +48,9 @@ Hooks (one line each, `.apply(EdgeHeaders::wire)` on a client builder, or a call
 elsewhere, plain http get none; a socket redirect is not followed; a blank value keeps the saved one. Run the unit tests with an
 English JVM locale (`JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"`): three upstream tests fail under a Japanese one.
 
-On a device (2026-11-11, Pixel 3, a throwaway build trusting a test CA): pairing by short code against an https test server sent
-both headers on `POST /auth/enroll` and on the `/ws` upgrade; the upgrade's 302 to another port was not followed (that port saw
-nothing); `shared_prefs/edge.xml` held only the sealed blob, no value in clear.
+Checked on a device with a build trusting a test CA: pairing by short code against an https test server sent both headers on
+`POST /auth/enroll` and on the `/ws` upgrade; the upgrade's 302 to another port was not followed (that port saw nothing);
+`shared_prefs/edge.xml` held only the sealed blob, no value in clear.
 
 ## Rebasing on a new Backplane
 
@@ -66,9 +66,24 @@ Check that every `OkHttpClient` in `mobile/android/app/src/main/java/dev/backpla
 ## Build
 
 ```sh
-cd mobile/android
-JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ANDROID_HOME=/opt/homebrew/share/android-commandlinetools \
-  ./gradlew assembleDebug -Pbp.appId=dev.backplane.mobile.gochiuma -Pbp.scheme=bpgochiuma "-Pbp.appName=Backplane CF"
+cd mobile/android   # JDK 17 and an Android SDK (JAVA_HOME, ANDROID_HOME)
+./gradlew assembleDebug -Pbp.appId=dev.backplane.mobile.gochiuma -Pbp.scheme=bpgochiuma "-Pbp.appName=Backplane CF"
 ```
 
 It installs beside the official app (its own id, scheme and launcher name).
+
+## GitHub Actions
+
+`.github/workflows/fork-android.yml` runs on a push to `cf-access`, a pull request, a `v*-cf.*` tag or by hand: the catalog checks,
+the unit tests, then an APK as the run's artifact (a tag also makes a release with it). The upstream workflows are left as they are
+and **disabled in the repository's Actions settings** (`gh workflow disable <name>`), so rebasing touches no workflow.
+
+With these secrets the APK is a release build signed by the fork's own key, so each one installs over the last; without them it is
+a debug APK under a new key each run:
+
+| Secret | |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the keystore, `base64 < fork.jks` |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | its passwords and alias |
+
+The version is the upstream tag below the branch plus `-cf.ciN` (or the tag's own name), the version code `1000000 + run number`.
