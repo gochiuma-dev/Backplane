@@ -50,7 +50,7 @@ pub fn parse(text: &str) -> Table {
 pub fn headers_in(t: &Table, addr: &str, tls: bool) -> Vec<(String, String)> { if tls { t.get(&key(addr)).cloned().unwrap_or_default() } else { vec![] } }
 pub fn headers(addr: &str, tls: bool) -> Vec<(String, String)> { headers_in(table(), addr, tls) }
 /// The same as header lines (`Name: value\r\n` each) for a hand-written request head.
-pub fn lines(addr: &str, tls: bool) -> String { headers(addr, tls).iter().map(|(n, v)| format!("{n}: {v}\r\n")).collect() }
+/* i18n-ok: HTTP header lines */ pub fn lines(addr: &str, tls: bool) -> String { headers(addr, tls).iter().map(|(n, v)| format!("{n}: {v}\r\n")).collect() }
 /// For a hub address (ws, wss, http, https).
 pub fn for_url(url: &str) -> Vec<(String, String)> { let (addr, tls) = crate::pairing::host_port(url.split(['?', '#']).next().unwrap_or(url).trim_end_matches("/ws")); headers(&addr, tls) }
 
