@@ -107,7 +107,7 @@ object HubRescue {
 
 class HubHttp(private val base: String, private val token: String?, healthTimeoutMs: Long = 5_000, callTimeoutMs: Long = 12_000) {
     // a client of its own: DataClient's has no timeouts, and a hung hub must not hold a request. The credential goes to the paired address and nowhere a redirect points.
-    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS).build()
+    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS).apply(EdgeHeaders::wire).build()
     private val quick = client.newBuilder().callTimeout(healthTimeoutMs, TimeUnit.MILLISECONDS).build()
 
     private fun request(path: String) = Request.Builder().url(base + path).apply { if (!token.isNullOrEmpty()) header("Authorization", "Bearer $token") }

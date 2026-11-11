@@ -79,7 +79,7 @@ object Pairing {
         val r = okhttp3.Request.Builder().url(origin + "/auth/enroll")
             .post(okhttp3.RequestBody.create(null, ByteArray(0))).header("Authorization", "Bearer " + invite.secret)
             .header("X-Backplane-Client", "native").header("X-Backplane-Name", android.os.Build.MODEL.filter { it.code in 32..126 }).build()
-        val client = okhttp3.OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
+        val client = okhttp3.OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).apply(EdgeHeaders::wire).build()
         client.newCall(r).execute().use { response ->
             val json = org.json.JSONObject(response.body?.string() ?: "{}")
             val token = json.optString("token")
@@ -176,7 +176,7 @@ class Hub(
     private val onMessage: (ByteArray) -> Unit,
     private val onClose: () -> Unit,
 ) {
-    private val client = OkHttpClient.Builder().socketFactory(LiveSockets).build()
+    private val client = OkHttpClient.Builder().socketFactory(LiveSockets).followRedirects(false).followSslRedirects(false).apply(EdgeHeaders::wire).build()
     private val main = Handler(Looper.getMainLooper())
     private var socket: WebSocket? = null
     private var backoff = 250L

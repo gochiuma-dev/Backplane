@@ -4245,6 +4245,19 @@ hub.acct.claude.cli.login = Claude CLI login
 hub.acct.codex.cli.login = Codex CLI login
 hub.acct.fable.weekly = Fable weekly
 ios.acct.also = Also added as {names}: the same account, counted once
+# ---- fork (cf-access): edge proxy headers, docs/FORK-CF-ACCESS.md ----
+fork.edge.head = EDGE PROXY HEADERS
+fork.edge.note = Optional. For a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Values are stored encrypted on this device and never shown again.
+fork.edge.name = Header name
+fork.edge.value = Value
+fork.edge.kept = Saved (hidden). Leave blank to keep it.
+fork.edge.add = Add header
+fork.edge.cf = Cloudflare Access
+fork.edge.bad = A header name or value is not valid.
+fork.edge.https = Headers are only sent to an https address.
+fork.edge.button = Headers
+fork.edge.title = Headers for {hub}
+fork.edge.count = Headers set: {n}
 # ---- end ----
 # the sidebar's sections (docs/ALWAYS-ON.md section 8): the hub's words, and the window's
 sidebar.sections.needs = Needs you
