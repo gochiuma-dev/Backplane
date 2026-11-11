@@ -10,6 +10,8 @@ pub struct First {
     default_home: String, old: Option<PathBuf>,
     path: Entity<Composer>, addr: Entity<Composer>, code: Entity<Composer>,
     busy: String, error: String, other: bool,
+    /// fork (cf-access): the edge proxy headers section (screens/pair.rs's), for an https hub
+    edge_open: bool, edge: Vec<(Entity<crate::input::TextInput>, Entity<crate::input::TextInput>)>,
 }
 
 /// Words a person reads before a hub exists; every_word below checks them with the same rules as setup.
@@ -34,7 +36,8 @@ impl First {
         cx.observe(&path, |_, _, cx| cx.notify()).detach();
         let light = config.theme.as_deref() == Some("light");
         let old = launch::user_home().and_then(|u| launch::old_home(&u));
-        let mut me = Self { config, started, light, default_home, old, path, addr, code, busy: String::new(), error: String::new(), other: false };
+        /* i18n-ok: hints, drawn through trs where they are painted */ let edge = [crate::edge::CF_ID, crate::edge::CF_SECRET].map(|n| (cx.new(|cx| { let mut i = crate::input::TextInput::new(cx).hint("Header name".into()); i.set(n.to_string(), cx); i }), cx.new(|cx| crate::input::TextInput::new(cx).hint("Value (blank keeps the saved one)".into()).secret()))).into();
+        let mut me = Self { config, started, light, default_home, old, path, addr, code, busy: String::new(), error: String::new(), other: false, edge_open: false, edge };
         if let Some(home) = auto { me.start(home, window, cx); }
         me
     }
@@ -69,6 +72,7 @@ impl First {
     }
     fn press_connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (text, typed) = (self.addr.read(cx).content.to_string(), self.code.read(cx).content.to_string());
+        if text.trim().starts_with("https://") { return self.connect_https(&text, &typed, cx) }
         let Some((addr, secret)) = launch::parse_hub(&text) else { self.error = trs("Give the other computer's address, for example desktop.example.ts.net:3800."); cx.notify(); return };
         let code = secret.unwrap_or(typed);
         if code.trim().is_empty() { self.error = trs("Type the short code from the other computer."); cx.notify(); return }
@@ -86,6 +90,34 @@ impl First {
     }
 }
 
+impl First {
+    /// fork (cf-access): an https hub (launch::pair speaks plain http only): pairing.rs's exchange, which speaks TLS and carries the edge headers
+    /// saved first from this form, then the client starts again on the saved pairing, as the pairing screen does.
+    fn connect_https(&mut self, text: &str, typed: &str, cx: &mut Context<Self>) {
+        let inv = if text.contains('#') { crate::pairing::submit(text.trim(), "", "") } else { crate::pairing::submit("", text.trim(), typed) };
+        let inv = match inv { Ok(i) => i, Err(e) => { self.error = trs(e); cx.notify(); return } };
+        let rows: Vec<(String, String)> = self.edge.iter().map(|(n, v)| (n.read(cx).content.to_string(), v.read(cx).content.to_string())).collect();
+        if self.edge_open && rows.iter().any(|(_, v)| !v.trim().is_empty()) { if let Err(e) = crate::edge::save(&inv.origin, &rows) { self.error = trs(e); cx.notify(); return } }
+        self.busy = tf("gpui.first.pairing", &[("addr", inv.origin.as_str().into())]); self.error.clear();
+        cx.spawn(async move |this, cx| {
+            /* i18n-ok: English, drawn through trs */ let r = cx.background_executor().spawn(async move { let (at, t) = crate::pairing::exchange(&inv, &crate::pairing::name())?; crate::hubs::adopt_saved(&at, &t).map(|_| ()).map_err(|_| "This pairing could not be saved here.".to_string()) }).await;
+            let why = match r { Ok(()) => crate::pairing::relaunch().to_string(), Err(e) => e };
+            let _ = this.update(cx, |t, cx| { t.busy.clear(); t.error = trs(&why); cx.notify(); });
+        }).detach();
+        cx.notify();
+    }
+    fn edge_view(&self, cx: &mut Context<Self>) -> Div {
+        let light = self.light; let c = |n: &str| theme::color(light, n);
+        let mut d = div().flex().flex_col().gap_2().child(div().id("first-edge").flex().items_center().gap_1().cursor_pointer().text_size(px(12.)).text_color(c("dim"))
+            .child(crate::art::icon(if self.edge_open { "chevron-down" } else { "chevron-right" }, 12., c("dim"))).child(trs("Edge proxy headers"))
+            .on_click(cx.listener(|t, _, _, cx| { t.edge_open = !t.edge_open; cx.notify(); })));
+        if !self.edge_open { return d }
+        d = d.child(div().text_size(px(11.)).text_color(c("dim")).child(trs("Optional, for a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Kept in this device's settings folder, readable by you only.")));
+        for (n, v) in &self.edge { d = d.child(div().flex().gap_2().child(div().h(px(32.)).px_3().w(px(220.)).flex().items_center().bg(c("raise")).child(n.clone())).child(div().h(px(32.)).px_3().flex_1().flex().items_center().bg(c("raise")).child(v.clone()))); }
+        d
+    }
+}
+
 impl Render for First {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let light = self.light; let c = |n: &str| theme::color(light, n);
@@ -95,7 +127,7 @@ impl Render for First {
         if !self.busy.is_empty() { col = col.child(div().text_size(px(14.)).child(self.busy.clone())); }
         else if self.other {
             col = col.child(div().text_size(px(20.)).font_weight(FontWeight::BOLD).child(trs(OTHER))).child(div().text_size(px(13.)).text_color(c("dim")).child(trs(OTHER_NOTE)))
-                .child(field(&self.addr)).child(field(&self.code))
+                .child(field(&self.addr)).child(field(&self.code)).child(self.edge_view(cx))
                 .child(div().flex().gap_2().child(button("first-connect", CONNECT, true).on_click(cx.listener(|t, _, w, cx| t.press_connect(w, cx)))).child(button("first-back", BACK, false).on_click(cx.listener(|t, _, _, cx| { t.other = false; t.error.clear(); cx.notify(); }))));
         } else {
             let typed = self.path.read(cx).content.to_string();

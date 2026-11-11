@@ -56,7 +56,8 @@ Checked on a device with a build trusting a test CA: pairing by short code again
 
 The same rule in `native/gpui/src/edge.rs`: only over TLS, only to that host and port, on the hub socket's upgrade (`hub.rs`) and on every
 hand-written request to the hub (pairing's `/auth/enroll`, attachments, images, the hub bar, the browser's frames). None of them follows a
-redirect. They are entered on the **pairing form** ("Edge proxy headers": two rows named for a Cloudflare Access service token,
+redirect. They are entered on the **pairing form**, and on the first-run screen's "Connect to a hub on another computer" (which upstream
+takes plain http only: an `https://` address there goes through `pairing.rs` instead, `screens/first.rs` `connect_https`) ("Edge proxy headers": two rows named for a Cloudflare Access service token,
 the values shown as `*` and never copied out; a blank value keeps the saved one) and saved when Pair is pressed, before `/auth/enroll`,
 for the https address being paired. To change them for a paired hub, pair it again (Settings → Hubs → Add a hub). They live in
 **`edge-headers.json`** in the client's settings folder, which can also be written by hand
