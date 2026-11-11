@@ -74,9 +74,11 @@ It installs beside the official app (its own id, scheme and launcher name).
 
 ## GitHub Actions
 
-`.github/workflows/fork-android.yml` runs on a push to `cf-access`, a pull request, a `v*-cf.*` tag or by hand: the catalog checks,
-the unit tests, then an APK as the run's artifact (a tag also makes a release with it). The upstream workflows are left as they are
-and **disabled in the repository's Actions settings** (`gh workflow disable <name>`), so rebasing touches no workflow.
+`.github/workflows/fork-android.yml` runs on a push to `cf-access`, a pull request, a `cf-v*` tag (`cf-v0.15.2-cf.2`) or by hand:
+the catalog checks, the unit tests, then an APK as the run's artifact (a tag also makes a release with it).
+The upstream workflows stay on and untouched, so rebasing touches no workflow. None of them fires on `cf-access` or a `cf-v*` tag:
+`ci.yml` runs on a push to `main` and on pull requests, `release.yml` on a `v*` tag. **Do not push upstream's `v*` tags to the fork**
+(`git push fork cf-access`, never `--tags`): each would start a full release build (it publishes nothing without upstream's signing secrets).
 
 With these secrets the APK is a release build signed by the fork's own key, so each one installs over the last; without them it is
 a debug APK under a new key each run:
