@@ -228,7 +228,7 @@ private fun AnnotatedString.Builder.inl(s: String, p: MdPalette, depth: Int) {
 
 private object MdPics {
     val cache = LruCache<String, ImageBitmap>(24)
-    val http = okhttp3.OkHttpClient()
+    val http = okhttp3.OkHttpClient.Builder().apply(EdgeHeaders::wire).build()   // fork: only the paired https hub's own address gets them
     suspend fun load(url: String, tid: String?): ImageBitmap? {
         cache.get(url)?.let { return it }
         val bytes = withContext(Dispatchers.IO) {

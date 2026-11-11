@@ -3783,4 +3783,17 @@ ios.buy.last = Buy it · last estimate: from {price}
 ios.buy.incomplete = Buy it · estimate incomplete
 
 android.notify.head = NOTIFICATIONS
+# ---- fork (cf-access): edge proxy headers, docs/FORK-CF-ACCESS.md ----
+fork.edge.head = EDGE PROXY HEADERS
+fork.edge.note = Optional. For a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Values are stored encrypted on this device and never shown again.
+fork.edge.name = Header name
+fork.edge.value = Value
+fork.edge.kept = Saved (hidden). Leave blank to keep it.
+fork.edge.add = Add header
+fork.edge.cf = Cloudflare Access
+fork.edge.bad = A header name or value is not valid.
+fork.edge.https = Headers are only sent to an https address.
+fork.edge.button = Headers
+fork.edge.title = Headers for {hub}
+fork.edge.count = Headers set: {n}
 # ---- end ----

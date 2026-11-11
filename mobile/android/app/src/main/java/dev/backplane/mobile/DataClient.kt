@@ -20,7 +20,9 @@ object DataClient {
     enum class Conn { OFFLINE, CONNECTING, ONLINE }
     private lateinit var app: Context
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val http = OkHttpClient.Builder().pingInterval(0, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build()
+    private val http = OkHttpClient.Builder().pingInterval(0, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).apply(EdgeHeaders::wire).build()
+    // fork (cf-access): the socket follows no redirect, so its edge headers stay with the hub (EdgeHeaders)
+    private val wsHttp = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     var conn by mutableStateOf(Conn.OFFLINE); private set
     var failure by mutableStateOf(""); private set
@@ -67,6 +69,7 @@ object DataClient {
     fun init(ctx: Context) {
         if (this::app.isInitialized) return
         app = ctx.applicationContext
+        EdgeHeaders.init(app)
         MeshDisk.dir = java.io.File(app.cacheDir, "models")
         links = HubList.decode(prefs().getString("links", null), prefs().getString("link", null))
         settledOpen = prefs().getStringSet("settled.open", emptySet())!!.toSet(); historyOpen = prefs().getBoolean("history.open", false)
@@ -82,6 +85,7 @@ object DataClient {
     // ---- pairing
     fun pair(text: String) {
         val inv = Pairing.invitation(text)
+        if (!EdgeHeaders.commitPending(inv?.origin ?: text)) { pairingError = Msg.fork_edge_bad; return }
         if (inv != null) {
             if (pairingBusy) return
             pairingBusy = true; pairingError = Msg.android_connecting
@@ -117,6 +121,7 @@ object DataClient {
     /** Forget one hub; when it was the one in use, the next paired hub is used (none left: the pairing screen). */
     fun forgetHub(key: String) {
         val current = Pairing.key(link ?: "") == key
+        links.filter { Pairing.key(it) == key }.forEach(EdgeHeaders::forget)
         save(HubList.forget(links, key) { Pairing.key(it) })
         if (!current) return
         close(); reset(); needsRepair = false; pairingError = ""
@@ -125,7 +130,7 @@ object DataClient {
     /** bumped by unpair(): the pairing screen starts again with empty fields */
     var pairEpoch by mutableStateOf(0); private set
     // forgets the hub and everything a pairing attempt left: a revoked mark, the last message, a pending question
-    fun unpair() { keepOutbox(Outbox()); links = emptyList(); adding = false; prefs().edit().remove("link").remove("links").apply(); reset(); close(); conn = Conn.OFFLINE; needsRepair = false; pairingError = ""; askLink = null; pairEpoch++ }
+    fun unpair() { EdgeHeaders.clear(); keepOutbox(Outbox()); links = emptyList(); adding = false; prefs().edit().remove("link").remove("links").apply(); reset(); close(); conn = Conn.OFFLINE; needsRepair = false; pairingError = ""; askLink = null; pairEpoch++ }
     private fun reset() { notice = HubNotice(); star = null; migrating = null; migrateOpen = false; projects = emptyList(); threads = emptyList(); entries = emptyMap(); older = emptyMap(); listsLoaded = false; open = null; cacheFile().delete() }
 
     // ---- connection
@@ -137,7 +142,7 @@ object DataClient {
         conn = Conn.CONNECTING
         heard = System.currentTimeMillis()
         val url = base + (if (base.contains("?")) "&" else "?") + "data=1&enc=json"
-        ws = http.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
+        ws = wsHttp.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) { scope.launch { if (g == gen) { heard = System.currentTimeMillis(); handle(text, g) } } }
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) { val b = bytes.toByteArray(); if (PlotStore.isPlot(b)) scope.launch { if (g == gen) plots.receive(b) } }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { scope.launch { lost(g, "closed") } }
