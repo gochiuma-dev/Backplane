@@ -44,6 +44,8 @@ pub struct TextInput {
     is_selecting: bool,
     /// How far the line is scrolled left so the caret stays in the box (a line longer than the box: a pasted link)
     scroll_x: Pixels,
+    /// fork (cf-access): drawn as `*` (one per byte, so offsets hold), never copied out
+    secret: bool,
 }
 
 impl TextInput {
@@ -139,14 +141,14 @@ impl TextInput {
     }
 
     fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.selected_range.is_empty() {
+        if !self.selected_range.is_empty() && !self.secret {
             cx.write_to_clipboard(ClipboardItem::new_string(
                 self.content[self.selected_range.clone()].to_string(),
             ));
         }
     }
     fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.selected_range.is_empty() {
+        if !self.selected_range.is_empty() && !self.secret {
             cx.write_to_clipboard(ClipboardItem::new_string(
                 self.content[self.selected_range.clone()].to_string(),
             ));
@@ -462,6 +464,8 @@ impl Element for TextElement {
 
         let (display_text, text_color) = if content.is_empty() {
             (SharedString::from(crate::i18n::trs(&input.placeholder)), rgb(0x5c6473).into())
+        } else if input.secret {
+            (SharedString::from("*".repeat(content.len())), style.color)
         } else {
             // streamer mode: what would identify the person is drawn as `*`, one per byte, so the caret and selection stay put
             (crate::streamer::same_width(&content, false).map_or(content, SharedString::from), style.color)
@@ -634,10 +638,12 @@ impl TextInput {
     pub fn new(cx: &mut Context<Self>) -> Self { Self {
         /* i18n-ok: the hint, drawn through trs where it is painted */ focus_handle: cx.focus_handle(), content: "".into(), placeholder: "Ask anything: @bot, >thread, %project, #room, $skill, /btw".into(),
         selected_range: 0..0, selection_reversed: false, marked_range: None,
-        last_layout: None, last_bounds: None, is_selecting: false, scroll_x: px(0.),
+        last_layout: None, last_bounds: None, is_selecting: false, scroll_x: px(0.), secret: false,
     }}
     /// What it says while empty.
     pub fn hint(mut self, text: SharedString) -> Self { self.placeholder = text; self }
+    /// fork (cf-access): a value shown as `*` and never copied or cut out.
+    pub fn secret(mut self) -> Self { self.secret = true; self }
     pub fn set(&mut self, text: String, cx: &mut Context<Self>) {
         self.reset(); self.selected_range=text.len()..text.len();self.content=text.into();cx.notify();
     }

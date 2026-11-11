@@ -4313,6 +4313,11 @@ fork.edge.https = ヘッダは https のアドレスにだけ送ります。
 fork.edge.button = ヘッダ
 fork.edge.title = {hub} のヘッダ
 fork.edge.count = 設定済みのヘッダ: {n}
+fork.edge.desk.head = 中継プロキシのヘッダ
+fork.edge.desk.note = 任意。アクセス制御のプロキシの奥にあるハブ向け（Cloudflare Access のサービストークンなど）。https で、このハブ自身のアドレスにだけ送ります。この端末の設定フォルダに、あなただけが読める形で保存します。
+fork.edge.desk.keep = 値（空欄なら保存済みのまま）
+fork.edge.desk.https = 中継プロキシのヘッダは https のアドレスにだけ送ります。
+fork.edge.desk.save = ヘッダをここに保存できませんでした。
 # ---- end ----
 # the sidebar's sections (docs/ALWAYS-ON.md section 8): the hub's words, and the window's
 sidebar.sections.needs = 対応が必要
