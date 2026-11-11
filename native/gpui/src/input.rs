@@ -101,9 +101,11 @@ impl TextInput {
     fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // fork (cf-access): a click takes the focus (a form of several fields: only the first one was focused, by its screen)
+        window.focus(&self.focus_handle);
         self.is_selecting = true;
 
         if event.modifiers.shift {
@@ -572,6 +574,7 @@ impl Render for TextInput {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
+            .w_full()   // fork (cf-access): the whole box takes the click, also while empty
             .key_context("TextInput")
             .track_focus(&self.focus_handle(cx))
             .cursor(CursorStyle::IBeam)
