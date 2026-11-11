@@ -4,12 +4,14 @@
 use crate::{i18n::trs, input::TextInput, pairing::{self, Invitation}, theme, Backplane};
 use gpui::{prelude::*, *};
 
-/* i18n-ok: a comment's words */ pub struct Ui { pub link: Entity<TextInput>, pub addr: Entity<TextInput>, pub code: Entity<TextInput>, pub repair: bool, pub status: String, pub busy: bool, pub ask: Option<Invitation>, /** opened from "Add a hub": the form can be left */ pub adding: bool, focus: bool }
+/* i18n-ok: a comment's words */ pub struct Ui { pub link: Entity<TextInput>, pub addr: Entity<TextInput>, pub code: Entity<TextInput>, pub repair: bool, pub status: String, pub busy: bool, pub ask: Option<Invitation>, /** opened from "Add a hub": the form can be left */ pub adding: bool, focus: bool, /** fork (cf-access): the edge proxy headers section is open, and its name and value rows */ pub edge_open: bool, pub edge: Vec<(Entity<TextInput>, Entity<TextInput>)> }
 
 fn field(hint: &str, cx: &mut Context<Backplane>) -> Entity<TextInput> { let h: SharedString = hint.to_string().into(); cx.new(|cx| TextInput::new(cx).hint(h)) }
 impl Ui {
     pub fn new(repair: bool, cx: &mut Context<Backplane>) -> Ui {
-        /* i18n-ok: example input, not words */ Ui { link: field("http://host:port/pair#invite=…", cx), addr: field("host:port", cx), code: field("ABCD-2345", cx), repair, status: String::new(), busy: false, ask: None, adding: false, focus: true }
+        // fork (cf-access): two rows, named for a Cloudflare Access service token; the names can be changed
+        /* i18n-ok: hints, drawn through trs where they are painted */ let edge = [crate::edge::CF_ID, crate::edge::CF_SECRET].map(|n| { let name = field("Header name", cx); name.update(cx, |i, cx| i.set(n.to_string(), cx)); (name, cx.new(|cx| TextInput::new(cx).hint("Value (blank keeps the saved one)".into()).secret())) }).into();
+        /* i18n-ok: example input, not words */ Ui { link: field("http://host:port/pair#invite=…", cx), addr: field("host:port", cx), code: field("ABCD-2345", cx), repair, status: String::new(), busy: false, ask: None, adding: false, focus: true, edge_open: false, edge }
     }
 }
 /// What a rig reads of this screen (never a credential: a link's secret stays out of it).
@@ -63,6 +65,13 @@ pub fn cancel(this: &mut Backplane, cx: &mut Context<Backplane>) {
     cx.notify();
 }
 fn pair(this: &mut Backplane, i: Invitation, cx: &mut Context<Backplane>) {
+    // fork (cf-access): the rows typed go to this hub before the exchange, so /auth/enroll already carries them (edge.rs)
+    if let Some(ui) = &this.pair {
+        let rows: Vec<(String, String)> = ui.edge.iter().map(|(n, v)| (n.read(cx).content.to_string(), v.read(cx).content.to_string())).collect();
+        if ui.edge_open && rows.iter().any(|(_, v)| !v.trim().is_empty()) {
+            if let Err(e) = crate::edge::save(&i.origin, &rows) { note("refused", e); if let Some(ui) = &mut this.pair { ui.status = e.into() } cx.notify(); return }
+        }
+    }
     /* i18n-ok: status is English (the rig reads it), drawn through trs */ if let Some(ui) = &mut this.pair { ui.busy = true; ui.status = format!("Pairing with {}…", i.origin) }
     cx.notify();
     cx.spawn(async move |weak, cx| {
@@ -85,6 +94,18 @@ fn btn(id: &'static str, label: &'static str, strong: bool, light: bool) -> Stat
 }
 fn boxed(input: &Entity<TextInput>, light: bool) -> Div { div().h(px(32.)).px_2().flex().items_center().border_1().border_color(theme::color(light, "line")).child(input.clone()) }
 
+/// fork (cf-access): "Edge proxy headers": closed, a toggle; open, the note and the name and value rows (values shown as `*`).
+fn edge_section(open: bool, rows: &[(Entity<TextInput>, Entity<TextInput>)], light: bool, cx: &mut Context<Backplane>) -> Div {
+    let c = |n: &str| theme::color(light, n);
+    let mut d = div().flex().flex_col().gap_2().child(div().id("pair-edge").flex().items_center().gap_1().cursor_pointer().text_size(px(12.)).text_color(c("dim"))
+        .child(crate::art::icon(if open { "chevron-down" } else { "chevron-right" }, 12., c("dim"))).child(trs("Edge proxy headers"))
+        .on_click(cx.listener(|this, _, _, cx| { if let Some(ui) = &mut this.pair { ui.edge_open = !ui.edge_open } cx.notify(); })));
+    if !open { return d }
+    d = d.child(div().text_size(px(11.)).text_color(c("dim")).child(trs("Optional, for a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Kept in this device's settings folder, readable by you only.")));
+    for (n, v) in rows { d = d.child(div().flex().gap_2().child(boxed(n, light).w(px(190.))).child(boxed(v, light).flex_1())); }
+    d
+}
+
 pub fn view(this: &mut Backplane, light: bool, window: &mut Window, cx: &mut Context<Backplane>) -> (AnyElement, Vec<crate::script::CtlEntry>) {
     use crate::script::{Ctl, CtlEntry};
     let c = |n: &str| theme::color(light, n);
@@ -94,6 +115,7 @@ pub fn view(this: &mut Backplane, light: bool, window: &mut Window, cx: &mut Con
     if ui.focus { ui.focus = false; window.focus(&ui.link.focus_handle(cx)); cx.spawn(async move |weak, cx| { let _ = weak.update(cx, |this, cx| this.pump(cx)); }).detach(); }
     let (repair, status, busy, ask, adding) = (ui.repair, ui.status.clone(), ui.busy, ui.ask.clone(), ui.adding);
     let (link, addr, code) = (ui.link.clone(), ui.addr.clone(), ui.code.clone());
+    let this_edge = (ui.edge_open, ui.edge.clone());
     let mut col = div().w(px(460.)).flex().flex_col().gap_3();
     let mut ctls = vec![];
     if let Some(i) = ask {
@@ -109,6 +131,7 @@ pub fn view(this: &mut Backplane, light: bool, window: &mut Window, cx: &mut Con
             .child(boxed(&link, light))
             .child(div().text_size(px(12.)).text_color(c("dim")).child(trs("Or the hub's address and short code")))
             .child(div().flex().gap_2().child(boxed(&addr, light).flex_1()).child(boxed(&code, light).w(px(130.))))
+            .child(edge_section(this_edge.0, &this_edge.1, light, cx))
             /* i18n-ok: button labels drawn through trs in btn; ctl labels are what drivers press */ .child(div().flex().gap_2().child(btn("pair-go", "Pair", true, light).on_click(cx.listener(|this, _, _, cx| go(this, cx))))
                 /* i18n-ok: button labels drawn through trs in btn; ctl labels are what drivers press */ .when(adding, |d| d.child(btn("pair-back", "Cancel", false, light).on_click(cx.listener(|this, _, _, cx| { this.pair = None; cx.notify(); })))));
         /* i18n-ok: button labels drawn through trs in btn; ctl labels are what drivers press */ ctls.push(ctl("pair:go", "Pair", Ctl::PairGo));

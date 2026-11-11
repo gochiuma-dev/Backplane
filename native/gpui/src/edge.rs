@@ -7,26 +7,57 @@
 //! They go only over TLS, only to that host and port: the hub socket (hub.rs) and the direct requests (pairing, attach, images, the hub bar,
 //! the browser's frames), none of which follows a redirect. Values are never logged.
 use serde_json::Value;
-use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
+use std::{collections::HashMap, path::PathBuf, sync::{OnceLock, RwLock}};
 
 type Table = HashMap<String, Vec<(String, String)>>;
+
+/* i18n-ok: header names */ pub const CF_ID: &str = "CF-Access-Client-Id";
+/* i18n-ok: header names */ pub const CF_SECRET: &str = "CF-Access-Client-Secret";
 
 fn path() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("BACKPLANE_GPUI_EDGE").filter(|p| !p.is_empty()) { return Some(p.into()) }
     if let Some(p) = std::env::var_os("BACKPLANE_GPUI_CONFIG").filter(|p| !p.is_empty()) { return Some(PathBuf::from(p).join("edge-headers.json")) }
     Some(crate::plat::config_base()?.join("backplane-gpui/edge-headers.json"))
 }
-fn table() -> &'static Table {
-    static T: OnceLock<Table> = OnceLock::new();
-    T.get_or_init(|| {
-        let Some(p) = path() else { return Table::new() };
-        let Ok(text) = std::fs::read_to_string(&p) else { return Table::new() };
+fn table() -> &'static RwLock<Table> {
+    static T: OnceLock<RwLock<Table>> = OnceLock::new();
+    T.get_or_init(|| RwLock::new({
+        let Some(p) = path() else { return RwLock::new(Table::new()) };
+        let Ok(text) = std::fs::read_to_string(&p) else { return RwLock::new(Table::new()) };
         let _ = crate::plat::make_private(&p);
         let t = parse(&text);
         /* i18n-ok: a log line */ if t.is_empty() { eprintln!("GPUI_LOG {{\"edge\":\"edge-headers.json holds no valid entry\"}}") }
         t
-    })
+    }))
 }
+/// The pairing form's rows for the hub at `origin` (an https address): a blank value keeps the one saved under that name, a row with no name
+/// is skipped; no row left removes the hub's entry. Written to the file (private to this user) and used at once. Err: what to say.
+pub fn save(origin: &str, rows: &[(String, String)]) -> Result<(), &'static str> {
+    let (addr, tls) = crate::pairing::host_port(origin.trim_end_matches('/'));
+    /* i18n-ok: English, drawn through trs by the form */ if !tls { return Err("Edge proxy headers are only sent to an https address.") }
+    let k = key(&addr);
+    let mut t = table().write().map_err(|_| "x")?;
+    let old: HashMap<String, String> = t.get(&k).cloned().unwrap_or_default().into_iter().map(|(n, v)| (n.to_ascii_lowercase(), v)).collect();
+    let mut next: Vec<(String, String)> = vec![];
+    for (n, v) in rows.iter().map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).filter(|(n, _)| !n.is_empty()) {
+        let v = if v.is_empty() { old.get(&n.to_ascii_lowercase()).cloned().unwrap_or_default() } else { v };
+        /* i18n-ok: English, drawn through trs by the form */ if !token(&n) || !value(&v) { return Err("A header name or value is not valid.") }
+        if !next.iter().any(|(m, _)| m.eq_ignore_ascii_case(&n)) { next.push((n, v)) }
+    }
+    let mut new = t.clone(); if next.is_empty() { new.remove(&k); } else { new.insert(k, next); }
+    /* i18n-ok: English, drawn through trs by the form */ let p = path().ok_or("No folder for this device's settings.")?;
+    let json = serde_json::Value::Object(new.iter().map(|(h, hs)| (h.clone(), serde_json::Value::Object(hs.iter().map(|(n, v)| (n.clone(), v.clone().into())).collect()))).collect());
+    let write = || -> std::io::Result<()> {
+        if let Some(d) = p.parent() { std::fs::create_dir_all(d)?; }
+        let mut o = std::fs::OpenOptions::new(); o.create(true).write(true).truncate(true);
+        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; o.mode(0o600); }
+        std::io::Write::write_all(&mut o.open(&p)?, serde_json::to_string_pretty(&json)?.as_bytes())?; crate::plat::make_private(&p)
+    };
+    /* i18n-ok: English, drawn through trs by the form */ write().map_err(|_| "The headers could not be saved here.")?;
+    *t = new; Ok(())
+}
+/// The header names saved for the hub at `origin` (never the values).
+pub fn names(origin: &str) -> Vec<String> { let (addr, tls) = crate::pairing::host_port(origin.trim_end_matches('/')); headers(&addr, tls).into_iter().map(|(n, _)| n).collect() }
 
 /// `host:port`, lower case, with 443 when it names none.
 fn key(s: &str) -> String {
@@ -48,7 +79,7 @@ pub fn parse(text: &str) -> Table {
 
 /// The headers for `addr` (host:port), only when the connection is TLS.
 pub fn headers_in(t: &Table, addr: &str, tls: bool) -> Vec<(String, String)> { if tls { t.get(&key(addr)).cloned().unwrap_or_default() } else { vec![] } }
-pub fn headers(addr: &str, tls: bool) -> Vec<(String, String)> { headers_in(table(), addr, tls) }
+pub fn headers(addr: &str, tls: bool) -> Vec<(String, String)> { table().read().map(|t| headers_in(&t, addr, tls)).unwrap_or_default() }
 /// The same as header lines (`Name: value\r\n` each) for a hand-written request head.
 /* i18n-ok: HTTP header lines */ pub fn lines(addr: &str, tls: bool) -> String { headers(addr, tls).iter().map(|(n, v)| format!("{n}: {v}\r\n")).collect() }
 /// For a hub address (ws, wss, http, https).
@@ -68,6 +99,20 @@ mod tests {
         assert!(headers_in(&t, "backplane.example.net:8443", true).is_empty(), "another port");
         assert!(headers_in(&t, "evil.example.net:443", true).is_empty() && headers_in(&t, "example.net:443", true).is_empty(), "another host");
         assert_eq!(headers_in(&t, "other.example.net:8443", true), vec![("X-Key".to_string(), "k".to_string())]);
+    }
+    #[test] fn the_form_saves_keeps_a_blank_value_and_refuses_http() {
+        let dir = std::env::temp_dir().join(format!("edge-test-{}", std::process::id())); let f = dir.join("edge-headers.json");
+        unsafe { std::env::set_var("BACKPLANE_GPUI_EDGE", &f); }
+        let r = |a: &str, b: &str| (a.to_string(), b.to_string());
+        assert!(save("http://h.example.net", &[r("X-A", "1")]).is_err(), "never for plain http");
+        assert!(save("https://h.example.net", &[r("Bad Name", "1")]).is_err());
+        save("https://h.example.net", &[r("CF-Access-Client-Id", "id.access"), r("CF-Access-Client-Secret", "s1")]).unwrap();
+        save("https://h.example.net/", &[r("CF-Access-Client-Id", ""), r("CF-Access-Client-Secret", "s2"), r("", "ignored")]).unwrap();
+        assert_eq!(headers("h.example.net:443", true), vec![r("CF-Access-Client-Id", "id.access"), r("CF-Access-Client-Secret", "s2")]);
+        assert_eq!(names("https://h.example.net"), vec!["CF-Access-Client-Id", "CF-Access-Client-Secret"]);
+        assert_eq!(parse(&std::fs::read_to_string(&f).unwrap()).get("h.example.net:443").map(|v| v.len()), Some(2), "on disk too");
+        save("https://h.example.net", &[]).unwrap(); assert!(names("https://h.example.net").is_empty(), "no row removes it");
+        let _ = std::fs::remove_dir_all(&dir);
     }
     #[test] fn a_bad_name_or_value_is_dropped_never_sent() {
         let t = parse(F);

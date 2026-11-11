@@ -3796,4 +3796,9 @@ fork.edge.https = Headers are only sent to an https address.
 fork.edge.button = Headers
 fork.edge.title = Headers for {hub}
 fork.edge.count = Headers set: {n}
+fork.edge.desk.head = Edge proxy headers
+fork.edge.desk.note = Optional, for a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Kept in this device's settings folder, readable by you only.
+fork.edge.desk.keep = Value (blank keeps the saved one)
+fork.edge.desk.https = Edge proxy headers are only sent to an https address.
+fork.edge.desk.save = The headers could not be saved here.
 # ---- end ----
