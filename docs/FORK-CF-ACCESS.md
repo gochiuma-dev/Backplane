@@ -56,7 +56,10 @@ Checked on a device with a build trusting a test CA: pairing by short code again
 
 The same rule in `native/gpui/src/edge.rs`: only over TLS, only to that host and port, on the hub socket's upgrade (`hub.rs`) and on every
 hand-written request to the hub (pairing's `/auth/enroll`, attachments, images, the hub bar, the browser's frames). None of them follows a
-redirect. There is no screen for them yet: they are read once at start from **`edge-headers.json`** in the client's settings folder
+redirect. They are entered on the **pairing form** ("Edge proxy headers": two rows named for a Cloudflare Access service token,
+the values shown as `*` and never copied out; a blank value keeps the saved one) and saved when Pair is pressed, before `/auth/enroll`,
+for the https address being paired. To change them for a paired hub, pair it again (Settings → Hubs → Add a hub). They live in
+**`edge-headers.json`** in the client's settings folder, which can also be written by hand
 (Windows `%APPDATA%\backplane-gpui\`, Linux `~/.config/backplane-gpui/`; `BACKPLANE_GPUI_EDGE` names another file):
 
 ```json
@@ -64,11 +67,11 @@ redirect. There is no screen for them yet: they are read once at start from **`e
 ```
 
 A key without a port is `:443`. The client makes the file private to the user (on Windows an ACL for the user only, as for the hub token)
-when it reads it; it never logs the values. A malformed name or value drops that header. Restart the client after editing it.
+when it reads or writes it; it never logs the values. A malformed name or value drops that header. Restart the client after editing it by hand.
 Pair with the address written `https://…` (a bare host is http and gets nothing). Dictation's upload from this machine
 (`voice_mic.rs`) speaks plain TCP only and does not reach an https hub, with or without this fork.
 
-Hooks: `main.rs` (`mod edge`), `hub.rs` (the upgrade request), `pairing.rs` (`enroll_request`), `screens/attach.rs` (`head`),
+Hooks: `screens/pair.rs` (the form's section, saved in `pair()`), `input.rs` (`secret()`: a field drawn as `*`, no copy or cut), `main.rs` (`mod edge`), `hub.rs` (the upgrade request), `pairing.rs` (`enroll_request`), `screens/attach.rs` (`head`),
 `screens/hubbar.rs` (`call`), `screens/images.rs` (`request`), `viewers/browser.rs` (`get_bytes`): one line each.
 
 `.github/workflows/fork-desktop.yml` runs the client's tests on Linux, then builds `backplane-gpui.exe` for Windows as the release does
