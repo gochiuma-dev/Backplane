@@ -60,7 +60,7 @@ fn svg_dims(b: &[u8]) -> Option<(u32, u32)> {
 /// A GET request for a path on the hub, with the token appended to the query.
 pub fn request(t: &Target, url: &str) -> String {
     let sep = if url.contains('?') { '&' } else { '?' };
-    /* i18n-ok: file signatures and an HTTP request */ format!("GET {url}{sep}token={} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", t.token, t.addr)
+    /* i18n-ok: file signatures and an HTTP request */ format!("GET {url}{sep}token={} HTTP/1.1\r\nHost: {}\r\n{}Connection: close\r\n\r\n", t.token, t.addr, crate::edge::lines(&t.addr, t.tls))   // fork (cf-access): the edge headers
 }
 
 /// Split an HTTP response into (status, body); None when it is not a complete head.
