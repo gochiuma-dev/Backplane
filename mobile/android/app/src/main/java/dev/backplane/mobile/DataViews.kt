@@ -218,6 +218,7 @@ private fun PairScreen() {
         Spacer(Modifier.height(8.dp))
         DBtn(Msg.android_pair_photo, false, !DataClient.pairingBusy, Modifier.testTag("pair.photo")) { photo.launch("image/*") }
         if (scan.note.isNotEmpty()) { Spacer(Modifier.height(8.dp)); ScanNote(scan) }
+        EdgePairSection(DataClient.pairEpoch)
         // revoked: the other paired hubs are one tap away
         val others = DataClient.links.drop(1).mapNotNull { Pairing.key(it) }
         if (DataClient.needsRepair && others.isNotEmpty()) {
@@ -930,6 +931,7 @@ private fun SettingsScreen(back: () -> Unit, hub: () -> Unit, accounts: () -> Un
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             DMono(Msg.native_settings_hubs.uppercase(), dfaint)
             var forget by remember { mutableStateOf<String?>(null) }
+            var edge by remember { mutableStateOf<String?>(null) }
             DataClient.links.mapNotNull { Pairing.key(it) }.forEachIndexed { i, k ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // the hub connected to now: the one in use, or the home hub while that one cannot be reached
@@ -939,6 +941,7 @@ private fun SettingsScreen(back: () -> Unit, hub: () -> Unit, accounts: () -> Un
                     if (k == DataClient.homeKey) DMono(Msg.native_hub_home, dcs.onSurfaceVariant, 12, Modifier.testTag("settings.hub.home.$k"))
                     if (i == 0 && DataClient.onHome) DMono(Msg.native_hub_unreachable, dcs.onSurfaceVariant, 12)
                     if (i > 0 && !on) DBtn(Msg.android_hub_use, false, modifier = Modifier.testTag("settings.hub.use.$k")) { DataClient.useHub(k); back() }
+                    DBtn(Msg.fork_edge_button, false, modifier = Modifier.testTag("settings.hub.edge.$k")) { edge = DataClient.links.firstOrNull { Pairing.key(it) == k } }
                     DBtn(Msg.bots_memory_forget, false, modifier = Modifier.testTag("settings.hub.forget.$k"), danger = true) { forget = k }
                 }
             }
@@ -955,6 +958,7 @@ private fun SettingsScreen(back: () -> Unit, hub: () -> Unit, accounts: () -> Un
                 if (DataClient.has("accounts")) DBtn(Msg.android_accounts, false, modifier = Modifier.testTag("settings.accounts"), onClick = accounts)
                 if (DataMcp.available) McpEntry(mcp)
             }
+            edge?.let { l -> EdgeHubDialog(l) { edge = null } }
             forget?.let { k ->
                 AlertDialog(onDismissRequest = { forget = null }, title = { Text(Msg.android_hub_forget_ask(k)) },
                     text = { Text(Msg.android_hub_forget_note) },

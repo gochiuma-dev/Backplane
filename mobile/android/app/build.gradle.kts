@@ -107,4 +107,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // the real org.json for unit tests (android.jar's is a stub)
     testImplementation("org.json:json:20240303")
+    // fork (cf-access): EdgeHeadersTest talks to real https servers
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 }

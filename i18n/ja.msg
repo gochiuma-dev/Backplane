@@ -4300,6 +4300,19 @@ hub.acct.claude.cli.login = Claude CLI ログイン
 hub.acct.codex.cli.login = Codex CLI ログイン
 hub.acct.fable.weekly = Fable 週間
 ios.acct.also = {names} としても追加済み：同じアカウントとして一度だけ数えます
+# ---- fork (cf-access): edge proxy headers, docs/FORK-CF-ACCESS.md ----
+fork.edge.head = 中継プロキシのヘッダ
+fork.edge.note = 任意。アクセス制御のプロキシの奥にあるハブ向け（Cloudflare Access のサービストークンなど）。https で、このハブ自身のアドレスにだけ送ります。値はこの端末に暗号化して保存し、二度と表示しません。
+fork.edge.name = ヘッダ名
+fork.edge.value = 値
+fork.edge.kept = 保存済み（非表示）。空欄のままなら変えません。
+fork.edge.add = ヘッダを足す
+fork.edge.cf = Cloudflare Access
+fork.edge.bad = ヘッダ名か値が正しくありません。
+fork.edge.https = ヘッダは https のアドレスにだけ送ります。
+fork.edge.button = ヘッダ
+fork.edge.title = {hub} のヘッダ
+fork.edge.count = 設定済みのヘッダ: {n}
 # ---- end ----
 # the sidebar's sections (docs/ALWAYS-ON.md section 8): the hub's words, and the window's
 sidebar.sections.needs = 対応が必要

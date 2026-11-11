@@ -176,6 +176,7 @@ class VoiceRecorder(private val ended: (String) -> Unit) {
                 c.setFixedLengthStreamingMode(body.size)
                 c.setRequestProperty("Content-Type", "application/octet-stream")
                 bearer?.let { c.setRequestProperty("Authorization", "Bearer $it") }
+                EdgeHeaders.apply(c)
                 c.outputStream.use { it.write(body) }
                 val code = c.responseCode
                 c.disconnect()
