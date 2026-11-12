@@ -6,7 +6,32 @@ use super::strokefont_data as data;
 
 pub struct Glyph { pub l: u32, pub r: u32, pub strokes: &'static [&'static [(u8, u8)]] }
 /// Stroke.glyph
-fn glyph(cp: u32) -> &'static Glyph { if cp < 256 { data::low(cp) } else if cp == 937 || cp == 8486 { &data::OHM } else { &data::BOX } }
+fn glyph(cp: u32) -> &'static Glyph { if cp < 256 { data::low(cp) } else if cp == 937 || cp == 8486 { &data::OHM } else { newstroke(cp).unwrap_or(&data::BOX) } }
+
+// fork: the rest of KiCad's newstroke font (Japanese, CJK, Greek, ...; newstroke_glyphs.txt, GPL-2.0-or-later, see its .LICENSE), so
+// text past Latin-1 is drawn as KiCad draws it, not as boxes. Read once, on the first such character. A glyph is "<left><right>" then
+// "<x><y>" pairs with " R" lifting the pen, in Hershey's letters: a letter's code less 18 is this font's unit (data's own scale).
+static NEWSTROKE: &str = include_str!("newstroke_glyphs.txt");
+fn newstroke(cp: u32) -> Option<&'static Glyph> {
+    static G: std::sync::OnceLock<Vec<Option<Glyph>>> = std::sync::OnceLock::new();
+    G.get_or_init(|| NEWSTROKE.lines().map(parse_newstroke).collect()).get(cp.checked_sub(32)? as usize)?.as_ref()
+}
+fn parse_newstroke(s: &str) -> Option<Glyph> {
+    let b = s.as_bytes();
+    if b.len() < 2 || b.len() % 2 != 0 { return None }
+    let u = |c: u8| c.checked_sub(18);
+    let (l, r) = (u(b[0])? as u32, u(b[1])? as u32);
+    let mut strokes: Vec<&'static [(u8, u8)]> = vec![]; let mut cur: Vec<(u8, u8)> = vec![];
+    for p in b[2..].chunks(2) {
+        if p == b" R" { if !cur.is_empty() { strokes.push(Box::leak(std::mem::take(&mut cur).into_boxed_slice())) } continue }
+        cur.push((u(p[0])?, u(p[1])?));
+    }
+    if !cur.is_empty() { strokes.push(Box::leak(cur.into_boxed_slice())) }
+    if strokes.is_empty() && cp_blank(l, r) { return None }
+    Some(Glyph { l, r, strokes: Box::leak(strokes.into_boxed_slice()) })
+}
+/// An empty entry ("" or two letters and nothing drawn) is a character the font lacks only when it has no width either.
+fn cp_blank(l: u32, r: u32) -> bool { l >= r }
 
 #[derive(Clone, Copy)]
 struct Ch { cp: u32, bar: bool }
@@ -111,4 +136,16 @@ mod tests {
     }
     #[test] fn wraps() { assert_eq!(wrap("aa bb", 1.27, 1000.0), "aa bb"); assert_eq!(wrap("aa bb", 1.27, 1.0), "aa\nbb"); assert_eq!(wrap("", 1.27, 1.0), ""); assert_eq!(wrap("a\nb", 1.27, 100.0), "a\nb"); }
     #[test] fn lines_break() { assert_eq!(lines("a\nb").len(), 2); assert_eq!(lines("").len(), 1); }
+}
+
+#[cfg(test)]
+mod newstroke_tests {
+    use super::*;
+    #[test] fn japanese_is_drawn_and_latin_is_as_before() {
+        for cp in [0x3042u32, 0x30a2, 0x65e5, 0x672c, 0x8a9e, 0xff08] { let g = glyph(cp); assert!(!std::ptr::eq(g, &data::BOX) && !g.strokes.is_empty() && g.r > g.l, "U+{cp:04X}"); }
+        // あ: "PfTI^H RYEXPZY ..." -> left P-18, right f-18, first stroke T,I -> ^,H
+        let a = glyph(0x3042); assert_eq!((a.l, a.r), (b'P' as u32 - 18, b'f' as u32 - 18)); assert_eq!(a.strokes[0], &[(b'T' - 18, b'I' - 18), (b'^' - 18, b'H' - 18)]);
+        assert!(std::ptr::eq(glyph(0x41), data::low(0x41)) && std::ptr::eq(glyph(937), &data::OHM), "Latin-1 and the ohm stay the hub's own");
+        assert!(std::ptr::eq(glyph(0x10000), &data::BOX), "past the font: a box");
+    }
 }
