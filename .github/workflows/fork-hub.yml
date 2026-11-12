@@ -29,7 +29,7 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"; echo "base=${base:-0.0.0}" >> "$GITHUB_OUTPUT"
       - name: kicad tests
         working-directory: native/host
-        run: cargo test --locked kicad::
+        run: 'cargo test --locked -- kicad::'
       - name: stamp the version
         run: python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.base }}"
       - name: build
