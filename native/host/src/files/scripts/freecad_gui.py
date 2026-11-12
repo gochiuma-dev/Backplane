@@ -18,7 +18,10 @@ try:
         base = tuple(round(c, 4) for c in vo.ShapeColor[:3])
         plain = all(abs(a - b) < 0.01 for a, b in zip(base, default)) and all(all(abs(a - b) < 0.01 for a, b in zip(c[:3], default)) for c in cols)
         tint = pal[n % len(pal)]; n += 1
-        faces = o.Shape.Faces
+        # A STEP assembly (KiCad's board export, a vendor's sub-assemblies) imports as Part::Features inside App::Part containers;
+        # o.Shape is in the container's frame, so the parents' placements must be applied or the parts land at their local origins.
+        shape = o.Shape.copy(); shape.Placement = o.getGlobalPlacement()
+        faces = shape.Faces
         for i, f in enumerate(faces):
             c = tint if plain else tuple(round(x, 3) for x in (cols[i][:3] if len(cols) == len(faces) else (cols[0][:3] if cols else base)))
             p, t = f.tessellate(tol)
