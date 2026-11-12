@@ -1,0 +1,54 @@
+# Fork (docs/FORK-CF-ACCESS.md): the hub (native/host) with KiCad's newstroke glyphs for text past Latin-1. The kicad tests on macOS, then
+# backplane-hub for macOS arm64 built as release.yml builds it (version stamped to the upstream one, the commit compiled in), as an artifact.
+# Put it in a build folder beside the upstream one and run it on probation (docs/FORK-CF-ACCESS.md, Hub).
+name: fork-hub
+on:
+  push:
+    branches: [cf-access]
+    tags: ['cf-v*']
+    paths: ['native/host/**', '.github/workflows/fork-hub.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # a tag push attaches the hub to its release
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the upstream tag names the version
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: native/host, shared-key: fork-hub-macos }
+      - name: version
+        id: v
+        run: |
+          base=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null | sed 's/^v//; s/-.*//')
+          if [[ "$GITHUB_REF" == refs/tags/cf-v* ]]; then name=${GITHUB_REF#refs/tags/cf-v}; else name="${base:-0.0.0}-cf.ci$GITHUB_RUN_NUMBER"; fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"; echo "base=${base:-0.0.0}" >> "$GITHUB_OUTPUT"
+      - name: kicad tests
+        working-directory: native/host
+        run: cargo test --locked kicad::
+      - name: stamp the version
+        run: python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.base }}"
+      - name: build
+        working-directory: native/host
+        run: BACKPLANE_COMMIT=$(git rev-parse --short HEAD) cargo build --release --bin backplane-hub
+      - name: package
+        run: |
+          d="$RUNNER_TEMP/backplane-hub-${{ steps.v.outputs.name }}-darwin-arm64"; mkdir -p "$d"
+          cp native/host/target/release/backplane-hub "$d/"; git rev-parse HEAD > "$d/COMMIT"
+          cp native/host/src/kicad/newstroke_glyphs.LICENSE docs/FORK-CF-ACCESS.md "$d/"
+          (cd "$d" && shasum -a 256 backplane-hub > SHA256SUMS && ./backplane-hub --version 2>/dev/null | head -1 || true)
+          (cd "$RUNNER_TEMP" && tar czf "backplane-hub-${{ steps.v.outputs.name }}-darwin-arm64.tar.gz" "$(basename "$d")")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backplane-hub-${{ steps.v.outputs.name }}-darwin-arm64
+          path: ${{ runner.temp }}/backplane-hub-${{ steps.v.outputs.name }}-darwin-arm64/
+      - name: release (tag push)
+        if: startsWith(github.ref, 'refs/tags/cf-v')
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          z="$RUNNER_TEMP/backplane-hub-${{ steps.v.outputs.name }}-darwin-arm64.tar.gz"
+          gh release upload "$GITHUB_REF_NAME" "$z" --clobber || gh release create "$GITHUB_REF_NAME" "$z" --title "$GITHUB_REF_NAME" --notes "Fork builds (docs/FORK-CF-ACCESS.md)." || gh release upload "$GITHUB_REF_NAME" "$z" --clobber

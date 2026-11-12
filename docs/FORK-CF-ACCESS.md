@@ -86,6 +86,19 @@ Not about headers, but carried here: on Windows the bundled JetBrains Mono (`art
 lines) got no system fallback, so Japanese came out as boxes. `mono_fallbacks()` names faces Windows ships (BIZ UDGothic, MS Gothic,
 Yu Gothic, Meiryo), after which DirectWrite's own system fallback still applies. Other platforms are as upstream.
 
+## Hub: Japanese and other text in schematics and boards
+
+The hub draws a design's text itself (`native/host/src/kicad/strokefont.rs`), with Hershey glyphs for Latin-1 and a box for everything
+else, so Japanese came out as boxes on every client. The fork adds the rest of KiCad's newstroke font: `kicad/newstroke_glyphs.txt`
+(one glyph a line, line n for U+0020 + n, extracted unchanged from KiCad 9.0's `common/newstroke_font.cpp`; **GPL-2.0-or-later**,
+notice in `newstroke_glyphs.LICENSE`), read once on the first such character. Latin-1 and the ohm sign stay the hub's own glyphs.
+To regenerate: take every string literal of `newstroke_font[]` in order, C escapes undone, one a line.
+
+`.github/workflows/fork-hub.yml` runs the hub's kicad tests on macOS and builds `backplane-hub` (macOS arm64, version stamped to the
+upstream one, the fork's commit compiled in). To run it: copy `builds/<upstream tag>/` to `builds/<tag>-cf.N/`, put the fork's
+`backplane-hub` and `COMMIT` in it, then `backplane hub update <tag>-cf.N` (probation: the first failure goes back to the upstream build).
+Upstream's own updater replaces it with its next release; rebase the fork then.
+
 ## Rebasing on a new Backplane
 
 ```sh
