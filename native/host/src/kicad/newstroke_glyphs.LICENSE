@@ -1,0 +1,13 @@
+newstroke_glyphs.txt: the glyphs of KiCad's newstroke font, one a line, line n for code point n + 32 (U+0020..U+FFEE), as
+common/newstroke_font.cpp (KiCad 9.0 branch) holds them; extracted by the fork's docs/FORK-CF-ACCESS.md recipe, unchanged.
+
+newstroke_font.cpp - definitions for automatically converted font
+This program source code file is part of KiCad, a free EDA CAD application.
+Copyright (C) 2010 vladimir uryvaev <vovanius@bk.ru>
+Copyright The KiCad Developers, see AUTHORS.txt for contributors.
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
