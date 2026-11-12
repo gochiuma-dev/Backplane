@@ -4,7 +4,7 @@
 name: fork-hub
 on:
   push:
-    branches: [cf-access]
+    branches: [cf-access, hub-v0.15.3-cf]
     tags: ['cf-v*']
     paths: ['native/host/**', '.github/workflows/fork-hub.yml']
   workflow_dispatch:
