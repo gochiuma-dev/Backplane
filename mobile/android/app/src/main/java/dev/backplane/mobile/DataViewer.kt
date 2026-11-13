@@ -86,7 +86,7 @@ fun ViewerScreen(thread: DThread, file: String = "", line: Int = 0, back: () -> 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 "Board" -> PlotTab(thread, "board", target?.path?.takeIf { target?.tab == "Board" } ?: "", files == null || files?.pcb.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_noboard)
-                "Schematic" -> PlotTab(thread, "schematic", target?.path?.takeIf { target?.tab == "Schematic" } ?: "", files == null || files?.sch.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_nosch, files?.sch.orEmpty())
+                "Schematic" -> PlotTab(thread, "schematic", target?.path?.takeIf { target?.tab == "Schematic" } ?: "", files == null || files?.sch.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_nosch, files?.let { f -> f.sch.removePrefix(f.root.trimEnd('/') + "/") }.orEmpty())
                 "3D" -> PlotTab(thread, "3d", "", files == null || files?.pcb.orEmpty().isNotEmpty(), Msg.android_viewer_noboard)
                 "Split" -> SplitTab(thread, files)
                 "Diff" -> DiffTab(thread)
@@ -199,7 +199,7 @@ private fun PlotTab(thread: DThread, kind: String, given: String, has: Boolean, 
     }
 }
 
-/** fork (cf-access): the project's .kicad_sch files, from the top sheet's folder down (hidden folders and KiCad's backups skipped). */
+/** fork (cf-access): the project's .kicad_sch files, from the top sheet's folder down (hidden folders, build and backups skipped). [root] is relative to the project (viewer.files gives it absolute; files.entries wants it relative). */
 private suspend fun schSheets(tid: String, root: String): List<String> {
     val out = mutableListOf<String>()
     val base = root.substringBeforeLast('/', "")
@@ -209,7 +209,7 @@ private suspend fun schSheets(tid: String, root: String): List<String> {
         val es = runCatching { DataClient.entries(tid, dir) }.getOrDefault(emptyList())
         for (e in es.sortedBy { it.name.lowercase() }) {
             val full = if (dir.isEmpty()) e.name else "$dir/${e.name}"
-            if (e.dir) { if (!e.name.startsWith(".") && !e.name.endsWith("-backups") && e.name != "node_modules") walk(full, depth + 1) }
+            if (e.dir) { if (!e.name.startsWith(".") && !e.name.endsWith("-backups") && !e.name.startsWith("backup") && e.name !in setOf("node_modules", "build")) walk(full, depth + 1) }
             else if (ext(e.name) == "kicad_sch") out.add(full)
         }
     }
