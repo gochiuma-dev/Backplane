@@ -86,7 +86,7 @@ fun ViewerScreen(thread: DThread, file: String = "", line: Int = 0, back: () -> 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 "Board" -> PlotTab(thread, "board", target?.path?.takeIf { target?.tab == "Board" } ?: "", files == null || files?.pcb.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_noboard)
-                "Schematic" -> PlotTab(thread, "schematic", target?.path?.takeIf { target?.tab == "Schematic" } ?: "", files == null || files?.sch.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_nosch)
+                "Schematic" -> PlotTab(thread, "schematic", target?.path?.takeIf { target?.tab == "Schematic" } ?: "", files == null || files?.sch.orEmpty().isNotEmpty() || target != null, Msg.android_viewer_nosch, files?.sch.orEmpty())
                 "3D" -> PlotTab(thread, "3d", "", files == null || files?.pcb.orEmpty().isNotEmpty(), Msg.android_viewer_noboard)
                 "Split" -> SplitTab(thread, files)
                 "Diff" -> DiffTab(thread)
@@ -101,8 +101,13 @@ fun ViewerScreen(thread: DThread, file: String = "", line: Int = 0, back: () -> 
 
 // ---- Board, Schematic and 3D: the hub's plot, drawn by the GPU view
 @Composable
-private fun PlotTab(thread: DThread, kind: String, path: String, has: Boolean, none: String) {
+private fun PlotTab(thread: DThread, kind: String, given: String, has: Boolean, none: String, root: String = "") {
     val scope = rememberCoroutineScope()
+    // fork (cf-access): a schematic's sheets, picked from a list (the hub sends no sheet symbols' boxes, so a tap on one opens nothing)
+    var sheet by remember(thread.id, given) { mutableStateOf("") }
+    var sheets by remember(thread.id) { mutableStateOf<List<String>?>(null) }
+    var sheetMenu by remember { mutableStateOf(false) }
+    val path = sheet.ifEmpty { given }
     val three = kind == "3d"
     val head = if (three) "2|" else if (kind == "schematic") "1|" else "0|"
     var error by remember { mutableStateOf("") }
@@ -175,16 +180,57 @@ private fun PlotTab(thread: DThread, kind: String, path: String, has: Boolean, n
         val progress = parts?.label.orEmpty()
         if (progress.isNotEmpty() && mesh?.mesh != null) DMono(Tr.t(progress), dcs.onSurfaceVariant, 11, Modifier.align(Alignment.BottomStart).padding(8.dp).background(dcs.surfaceVariant.copy(alpha = 0.85f)).padding(horizontal = 8.dp, vertical = 4.dp).testTag("viewer.parts"))
         val l = layers
-        if (!three && layersPresent.isNotEmpty() && l != null) {
-            Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ViewChip(Tr.t(l.head), l.mode > 0, "viewer.layers") { refs = null; menu = !menu }
+        val showLayers = !three && layersPresent.isNotEmpty() && l != null
+        if (kind == "schematic" || showLayers) Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (kind == "schematic") ViewChip(Msg.viewer_sch_tree, sheetMenu, "viewer.sheets") { menu = false; refs = null; sheetMenu = !sheetMenu
+                if (sheetMenu && sheets == null) scope.launch { sheets = schSheets(thread.id, root.ifEmpty { given }) } }
+            if (showLayers && l != null) {
+                ViewChip(Tr.t(l.head), l.mode > 0, "viewer.layers") { refs = null; sheetMenu = false; menu = !menu }
                 if (comparing.isEmpty()) ViewChip(Msg.viewer_history_compare, refs != null, "viewer.compare") { menu = false; if (refs != null) refs = null else scope.launch { refs = runCatching { DataClient.refs(thread.id) }.getOrDefault(emptyList()) } }
                 else ViewChip(Msg.android_compare_close, true, "viewer.compare.close") { comparing = ""; scope.launch { runCatching { DataClient.watch(thread.id, kind, path) }.onFailure { error = it.message ?: "" } } }
             }
+        }
+        if (sheetMenu) SheetMenu(sheets, root.ifEmpty { given }, path, { s -> sheetMenu = false; sheet = s }, Modifier.align(Alignment.TopStart).padding(top = 44.dp, start = 8.dp))
+        if (showLayers && l != null) {
             if (menu) LayerMenu(l, layersPresent, act, Modifier.align(Alignment.TopStart).padding(top = 44.dp, start = 8.dp))
             refs?.let { rows -> RefMenu(rows, { c -> refs = null; scope.launch { runCatching { DataClient.compare(thread.id, kind, c, l.bits, path); comparing = c }.onFailure { error = it.message ?: "" } } }, Modifier.align(Alignment.TopStart).padding(top = 44.dp, start = 8.dp)) }
         }
         if (info.isNotEmpty()) ProbeCard(info, lit.size, Modifier.align(Alignment.BottomCenter)) { info = ""; picked = ""; lit = emptyList() }
+    }
+}
+
+/** fork (cf-access): the project's .kicad_sch files, from the top sheet's folder down (hidden folders and KiCad's backups skipped). */
+private suspend fun schSheets(tid: String, root: String): List<String> {
+    val out = mutableListOf<String>()
+    val base = root.substringBeforeLast('/', "")
+    var seen = 0
+    suspend fun walk(dir: String, depth: Int) {
+        if (depth > 4 || seen++ > 200) return
+        val es = runCatching { DataClient.entries(tid, dir) }.getOrDefault(emptyList())
+        for (e in es.sortedBy { it.name.lowercase() }) {
+            val full = if (dir.isEmpty()) e.name else "$dir/${e.name}"
+            if (e.dir) { if (!e.name.startsWith(".") && !e.name.endsWith("-backups") && e.name != "node_modules") walk(full, depth + 1) }
+            else if (ext(e.name) == "kicad_sch") out.add(full)
+        }
+    }
+    walk(base, 0)
+    if (root.isNotEmpty()) { out.remove(root); out.add(0, root) }
+    return out
+}
+
+@Composable
+private fun SheetMenu(rows: List<String>?, root: String, on: String, pick: (String) -> Unit, modifier: Modifier) {
+    Column(modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).background(dcs.surfaceVariant).border(BorderStroke(1.dp, dcs.outlineVariant)).padding(8.dp).testTag("sheet.menu"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (rows == null) CircularProgressIndicator(Modifier.padding(8.dp))
+        else rows.forEachIndexed { i, r ->
+            val here = r == on || (on.isEmpty() && r == root)
+            val base = root.substringBeforeLast('/', "")
+            val name = if (base.isNotEmpty() && r.startsWith("$base/")) r.removePrefix("$base/") else r
+            Row(Modifier.clickable { pick(r) }.testTag("sheet.row.$i"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DMono(if (r == root) Msg.viewer_sheet_top else "", dcs.onSurfaceVariant, 12)
+                DMono(name, if (here) dcs.primary else dcs.onSurface, 12, bold = here)
+            }
+        }
     }
 }
 
