@@ -1,0 +1,119 @@
+# Fork releases for the Mac hub (docs/FORK-HUB-FEED.md). The hub reads this fork's releases (BACKPLANE_UPDATE_FEED) instead of upstream's,
+# so it keeps the fork's fixes and still takes each new upstream release, with the guard's usual signature check, probation and rollback.
+#
+# Every few hours: the newest upstream full release T; the branch `hub-fork` (upstream tag + the fork's patches, base in .fork/BASE) moved onto T
+# when T is new (a conflict fails the run and nothing is published: the hub stays where it is); when this commit has no release yet, the hub is
+# built from it, put into upstream's darwin-arm64 archive of T in place of upstream's hub, and published as a signed prerelease.
+#
+# Tags: `vX.Y.(Z+1)-nightly.YYYYMMDD.N` for upstream vX.Y.Z, so a fork release is newer than upstream's T and than every earlier fork release,
+# and older than upstream's next release (the updater only accepts vX.Y.Z, -beta.N and -nightly.D.N). The hub's channel is beta.
+name: fork-release
+on:
+  schedule: [{ cron: '23 */6 * * *' }]
+  workflow_dispatch:
+    inputs:
+      force: { description: 'release even if this commit already has one', type: boolean, default: false }
+
+permissions:
+  contents: write
+
+concurrency: { group: fork-release, cancel-in-progress: false }
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: BackplaneWorks/Backplane
+      OPENSSL: /opt/homebrew/opt/openssl@3/bin/openssl   # -rawin ed25519 needs OpenSSL 3 (macOS's own openssl is LibreSSL)
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: hub-fork, fetch-depth: 0 }
+      - name: upstream's newest full release
+        id: up
+        run: |
+          set -e
+          t=$(gh api "repos/$UPSTREAM/releases?per_page=30" -q '[.[] | select(.draft|not) | select(.prerelease|not) | select([.assets[].name] | index("manifest.json.sig"))][0].tag_name')
+          [[ "$t" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no upstream release ($t)"; exit 1; }
+          echo "tag=$t" >> "$GITHUB_OUTPUT"
+      - name: move the patches onto it
+        id: rebase
+        run: |
+          set -e
+          git config user.name "fork-release"; git config user.email "fork-release@users.noreply.github.com"
+          git remote add upstream "https://github.com/$UPSTREAM.git"; git fetch -q upstream "refs/tags/${{ steps.up.outputs.tag }}:refs/tags/${{ steps.up.outputs.tag }}"
+          base=$(cat .fork/BASE)
+          if [ "$base" != "${{ steps.up.outputs.tag }}" ]; then
+            git fetch -q upstream "refs/tags/$base:refs/tags/$base"
+            if ! git rebase --onto "${{ steps.up.outputs.tag }}" "$base" hub-fork; then
+              git rebase --abort; echo "::error::the fork's patches do not apply on ${{ steps.up.outputs.tag }}: rebase hub-fork by hand"; exit 1
+            fi
+            printf '%s\n' "${{ steps.up.outputs.tag }}" > .fork/BASE; git commit -q -m "fork: base ${{ steps.up.outputs.tag }}" .fork/BASE
+            git push --force-with-lease origin hub-fork
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: already released?
+        id: have
+        run: |
+          n=$(gh release list -R "$GITHUB_REPOSITORY" --limit 50 --json tagName,isPrerelease -q '.[].tagName' | while read t; do
+                gh release view "$t" -R "$GITHUB_REPOSITORY" --json body -q .body | grep -qx "commit=${{ steps.rebase.outputs.commit }}" && echo "$t"; done | head -1)
+          if [ -n "$n" ] && [ "${{ inputs.force }}" != "true" ]; then echo "released as $n"; echo "skip=true" >> "$GITHUB_OUTPUT"; else echo "skip=false" >> "$GITHUB_OUTPUT"; fi
+      - name: version
+        if: steps.have.outputs.skip != 'true'
+        id: v
+        run: |
+          t=${{ steps.up.outputs.tag }}; IFS=. read -r x y z <<< "${t#v}"
+          v="$x.$y.$((z+1))-nightly.$(date -u +%Y%m%d).${{ github.run_number }}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"; echo "tag=v$v" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.have.outputs.skip != 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.have.outputs.skip != 'true'
+        with: { workspaces: native/host, shared-key: fork-hub-macos }
+      - name: test and build the hub
+        if: steps.have.outputs.skip != 'true'
+        run: |
+          set -e
+          python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.version }}"
+          (cd native/host && cargo test --locked -- kicad:: update::)
+          (cd native/host && BACKPLANE_COMMIT=$(git rev-parse --short HEAD) cargo build --release --bin backplane-hub)
+          native/host/target/release/backplane-hub --version 2>/dev/null | head -1 || true
+      - name: upstream's archive with this hub
+        if: steps.have.outputs.skip != 'true'
+        run: |
+          set -e
+          [ -x "$OPENSSL" ] || brew install openssl@3
+          T=${{ steps.up.outputs.tag }}; NEW=${{ steps.v.outputs.tag }}
+          mkdir up && gh release download "$T" -R "$UPSTREAM" -D up -p "backplane-$T-darwin-arm64-native.tar.gz" -p manifest.json -p manifest.json.sig -p manifest.json.keyid
+          # upstream's own signature over its manifest, under the key this tree still carries in .fork/upstream-release.pub
+          python3 .fork/verify_upstream.py up .fork/upstream-release.pub "darwin-arm64"
+          python3 .fork/swap_hub.py "up/backplane-$T-darwin-arm64-native.tar.gz" native/host/target/release/backplane-hub "$(git rev-parse HEAD)" "backplane-$NEW-darwin-arm64-native.tar.gz"
+          python3 - "$NEW" "${{ steps.v.outputs.version }}" "$(git rev-parse HEAD)" <<'PY'
+          import hashlib, json, os, sys
+          tag, v, sha = sys.argv[1:4]; f = f"backplane-{tag}-darwin-arm64-native.tar.gz"
+          a = {"darwin-arm64": {"name": f, "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest(), "size": os.path.getsize(f)}}
+          open("manifest.json", "w").write(json.dumps({"schema": 1, "tag": tag, "version": v, "channel": "beta", "commit": sha, "assets": a}, indent=1))
+          PY
+          cat manifest.json
+      - name: sign
+        if: steps.have.outputs.skip != 'true'
+        env:
+          KEY: ${{ secrets.FORK_RELEASE_KEY }}
+          KEY_ID: ${{ secrets.FORK_RELEASE_KEY_ID }}
+        run: |
+          set -e
+          [ -n "$KEY" ] || { echo "::error::no FORK_RELEASE_KEY"; exit 1; }
+          [ "$KEY_ID" = "$(cat native/host/src/update/release.keyid)" ] || { echo "::error::FORK_RELEASE_KEY_ID is not the key this hub trusts"; exit 1; }
+          umask 077; printf '%s\n' "$KEY" > k.pem
+          "$OPENSSL" pkeyutl -sign -inkey k.pem -rawin -in manifest.json -out manifest.json.sig
+          "$OPENSSL" pkeyutl -verify -pubin -inkey native/host/src/update/release.pub -rawin -in manifest.json -sigfile manifest.json.sig
+          rm -f k.pem; printf '%s' "$KEY_ID" > manifest.json.keyid
+      - name: publish (manifest and signature last)
+        if: steps.have.outputs.skip != 'true'
+        run: |
+          set -e
+          NEW=${{ steps.v.outputs.tag }}
+          printf 'upstream=%s\ncommit=%s\n' "${{ steps.up.outputs.tag }}" "$(git rev-parse HEAD)" > notes.txt
+          gh release create "$NEW" --prerelease --draft --target "$(git rev-parse HEAD)" --title "$NEW (fork of ${{ steps.up.outputs.tag }})" --notes-file notes.txt "backplane-$NEW-darwin-arm64-native.tar.gz"
+          gh release upload "$NEW" manifest.json manifest.json.sig manifest.json.keyid
+          gh release edit "$NEW" --draft=false
