@@ -25,6 +25,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       UPSTREAM: BackplaneWorks/Backplane
+      GH_REPO: ${{ github.repository }}   # gh would otherwise pick the parent once the upstream remote is added
       OPENSSL: /opt/homebrew/opt/openssl@3/bin/openssl   # -rawin ed25519 needs OpenSSL 3 (macOS's own openssl is LibreSSL)
     steps:
       - uses: actions/checkout@v4
