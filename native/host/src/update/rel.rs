@@ -254,7 +254,7 @@ mod tests {
     }
     #[test] fn a_manifest_signed_with_another_key_is_refused_by_the_release_key() {
         let (body, other) = (br#"{"schema":1}"#, pair()); let sig = other.sk.sign(body, None);
-        assert!(verify(body, sig.as_ref(), "6c899f869be656d3", &keys()).unwrap_err().contains("does not match"), "under the release key's ID");
+        assert!(verify(body, sig.as_ref(), "e9a1d37ddcb587f5", &keys()).unwrap_err().contains("does not match"), "under the release key's ID");
         assert!(verify(body, sig.as_ref(), "k1", &keys()).unwrap_err().contains("does not trust"), "under its own ID");
     }
     #[test] fn a_good_manifest_names_its_asset() {
@@ -283,7 +283,7 @@ mod tests {
         assert!(parse(br#"{"schema":2,"assets":{}}"#).unwrap_err().contains("newer")); assert!(parse(b"not json").is_err()); assert!(parse(br#"{"schema":1}"#).is_err());
     }
     #[test] fn the_release_key_is_trusted_under_its_id() {
-        let k = keys(); assert_eq!((k.len(), k[0].0.as_str()), (1, "6c899f869be656d3"), "release.pub and release.keyid agree, and nothing else is trusted");
+        let k = keys(); assert_eq!((k.len(), k[0].0.as_str()), (1, "e9a1d37ddcb587f5"), "release.pub and release.keyid agree, and nothing else is trusted");
         assert!(pem_key(include_str!("release.pub"), "0000000000000000").is_none(), "a key ID that is not this key's is no key");
         assert!(pem_key("-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n", "x").is_none());
     }
