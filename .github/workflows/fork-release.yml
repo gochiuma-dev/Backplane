@@ -74,9 +74,11 @@ jobs:
         if: steps.have.outputs.skip != 'true'
         run: |
           set -e
-          python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.version }}"
           (cd native/host && cargo test --locked -- kicad:: update::)
-          (cd native/host && BACKPLANE_COMMIT=$(git rev-parse --short HEAD) cargo build --release --bin backplane-hub)
+          # the version stamped after the tests: Cargo.lock records the package's own version, so --locked cannot follow the stamp
+          python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.version }}"
+          (cd native/host && BACKPLANE_COMMIT=$(git rev-parse --short HEAD) cargo build --offline --release --bin backplane-hub)
+          git checkout -- native/host/Cargo.toml native/host/Cargo.lock
           native/host/target/release/backplane-hub --version 2>/dev/null | head -1 || true
       - name: upstream's archive with this hub
         if: steps.have.outputs.skip != 'true'
