@@ -771,3 +771,10 @@ fn a_reply_and_a_notice_carry_their_code_to_copy() {
     assert!(act_entry("t1", "x2", "warn", "error", "plain words", 1).unwrap().get("copy").is_none());
     assert!(super::FEATURES.contains(&"copy") && super::FEATURES.contains(&"termChat"));
 }
+
+/// fork: a schematic's sheets (kicad/watch.rs `sheets`) reach a phone's socket, so its sheet picker has rows; other hub pushes still do not.
+#[test]
+fn a_phone_is_passed_a_schematics_sheets() {
+    assert!(ext::wants_value(&json!({"t":"sheets","root":"/p","slot":"","gen":"1","rows":"0\t0\troot\t/p/a.kicad_sch"})));
+    assert!(!ext::wants_value(&json!({"t":"thread","id":"t1"})));
+}
