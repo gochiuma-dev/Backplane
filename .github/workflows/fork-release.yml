@@ -95,7 +95,7 @@ jobs:
           import hashlib, json, os, sys
           tag, v, sha = sys.argv[1:4]; f = f"backplane-{tag}-darwin-arm64-native.tar.gz"
           a = {"darwin-arm64": {"name": f, "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest(), "size": os.path.getsize(f)}}
-          open("manifest.json", "w").write(json.dumps({"schema": 1, "tag": tag, "version": v, "channel": "beta", "commit": sha, "assets": a}, indent=1))
+          open("manifest.json", "w").write(json.dumps({"schema": 1, "tag": tag, "version": v, "channel": "nightly", "commit": sha, "assets": a}, indent=1))
           PY
           cat manifest.json
       - name: sign

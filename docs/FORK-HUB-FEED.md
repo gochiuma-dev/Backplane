@@ -14,7 +14,7 @@ upstream's next release, so the hub reads **this fork's releases** instead and s
   into upstream's darwin-arm64 archive of T in place of upstream's `backplane-hub` and `COMMIT` (`.fork/swap_hub.py`), a manifest for
   darwin-arm64 only, signed, published as a prerelease `vX.Y.(Z+1)-nightly.YYYYMMDD.N` with `upstream=` and `commit=` in its notes.
 - **Why that tag**: the updater takes only `vX.Y.Z`, `-beta.N` and `-nightly.D.N`, and only something newer than the running hub. That tag is newer
-  than upstream's T and than every earlier fork release, and older than upstream's next release. So the hub's channel is **beta**.
-- **The hub's side**: `BACKPLANE_UPDATE_FEED=https://api.github.com/repos/gochiuma-dev/Backplane/releases` in its launchd job, `update.channel` beta,
+  than upstream's T and than every earlier fork release, and older than upstream's next release. So the hub's channel is **nightly** (from 0.16 nightly ranks above beta, and the manifest says `nightly`, matching its tag).
+- **The hub's side**: `BACKPLANE_UPDATE_FEED=https://api.github.com/repos/gochiuma-dev/Backplane/releases` in its launchd job, `update.channel` nightly,
   no `BACKPLANE_NO_UPDATE`. Only the Mac (darwin-arm64) is built.
 - Other builds in the archive (client, step2glb, KiCad runtime pin, kistack) are upstream's T as they are.
