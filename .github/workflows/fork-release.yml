@@ -76,7 +76,7 @@ jobs:
         run: |
           set -e
           # upstream's update-offer test expects a Linux/Windows answer (it says "on the Mac" here); Linux CI upstream runs it
-          (cd native/host && cargo test --locked -- kicad:: update:: --skip the_update_offer_names_from_to_why_and_size_only_over_an_older_backplane_runtime)
+          (cd native/host && cargo test --locked -- kicad:: update:: a_phone_is_passed_a_schematics_sheets --skip the_update_offer_names_from_to_why_and_size_only_over_an_older_backplane_runtime)
           # the version stamped after the tests: Cargo.lock records the package's own version, so --locked cannot follow the stamp
           python3 -c 'import re,sys; p="native/host/Cargo.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"(?m)^version = \".*\"$", "version = \"%s\"" % sys.argv[1], s, count=1))' "${{ steps.v.outputs.version }}"
           (cd native/host && BACKPLANE_COMMIT=$(git rev-parse --short HEAD) cargo build --offline --release --bin backplane-hub)
