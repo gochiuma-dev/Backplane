@@ -757,3 +757,10 @@ fn a_reply_reaches_a_phone_as_its_body_and_reply_to() {
     let plain = en["result"]["entries"].as_array().unwrap().iter().find(|x| x["kind"] == "assistant" && x["id"] != "r1").cloned();
     if let Some(x) = plain { assert!(x.get("images").is_none(), "{x}") }
 }
+
+/// fork: a schematic's sheets (kicad/watch.rs `sheets`) reach a phone's socket, so its sheet picker has rows; other hub pushes still do not.
+#[test]
+fn a_phone_is_passed_a_schematics_sheets() {
+    assert!(ext::wants_value(&json!({"t":"sheets","root":"/p","slot":"","gen":"1","rows":"0\t0\troot\t/p/a.kicad_sch"})));
+    assert!(!ext::wants_value(&json!({"t":"thread","id":"t1"})));
+}
