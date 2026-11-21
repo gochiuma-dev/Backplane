@@ -137,6 +137,14 @@ pub fn keys() -> Vec<(String, [u8; 32])> {
     k
 }
 
+/// fork: the keys a KiCad pin document (kicad/pins.rs) is checked against: the fork's release key, and upstream's (`upstream-release.pub`), which signs
+/// upstream's KiCad feed. Hub updates stay on `keys()` alone: this hub takes only the fork's releases, but the Backplane KiCads upstream publishes.
+pub fn pin_keys() -> Vec<(String, [u8; 32])> {
+    let mut k = keys();
+    k.extend(pem_key(include_str!("upstream-release.pub"), include_str!("upstream-release.keyid")));
+    k
+}
+
 /// `manifest.json`'s bytes against `manifest.json.sig` (64 raw bytes) under the key `manifest.json.keyid` names. The bytes are checked before they are read as anything.
 pub fn verify(bytes: &[u8], sig: &[u8], keyid: &str, keys: &[(String, [u8; 32])]) -> Result<(), String> {
     if keys.is_empty() { return Err("this build has no update key, so it cannot update itself".into()) }
@@ -281,6 +289,9 @@ mod tests {
     }
     #[test] fn a_newer_schema_or_junk_is_refused() {
         assert!(parse(br#"{"schema":2,"assets":{}}"#).unwrap_err().contains("newer")); assert!(parse(b"not json").is_err()); assert!(parse(br#"{"schema":1}"#).is_err());
+    }
+    #[test] fn a_pin_document_trusts_the_forks_key_and_upstreams() {
+        let k: Vec<String> = pin_keys().into_iter().map(|x| x.0).collect(); assert_eq!(k, ["e9a1d37ddcb587f5", "6c899f869be656d3"], "upstream-release.pub and its id agree");
     }
     #[test] fn the_release_key_is_trusted_under_its_id() {
         let k = keys(); assert_eq!((k.len(), k[0].0.as_str()), (1, "e9a1d37ddcb587f5"), "release.pub and release.keyid agree, and nothing else is trusted");

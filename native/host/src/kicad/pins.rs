@@ -170,7 +170,7 @@ fn dir(home: &Path) -> PathBuf { home.join("kicad-pins") }
 pub fn start(hub: &Arc<Hub>) {
     let mut st = STATE.lock().unwrap(); st.hub = hub.cfg.version.clone();
     if let Ok(b) = std::fs::read(dir(&hub.cfg.home).join("pins.json")) {
-        match open(&b, &rel::keys()) {
+        match open(&b, &rel::pin_keys()) {
             Ok(d) => { let (_, w) = st.hold(d, here(), now_s(), &install::os_version()); eprintln!("kicad: pins: cached {w}") }
             Err(e) => eprintln!("kicad: pins: the cached document is refused ({e}); the compiled pins stand"),
         }
@@ -215,7 +215,7 @@ pub async fn refresh(hub: &Arc<Hub>) -> bool {
     let d2 = d.clone();
     let got = tokio::task::spawn_blocking(move || fetch(&u, &d2)).await.unwrap_or_else(|e| Err(e.to_string()));
     let read = got.is_ok();
-    let r = { let mut st = STATE.lock().unwrap(); let r = apply(&mut st, got, &rel::keys(), &d, here(), now_s(), &install::os_version()); r.map_err(|e| format!("{e}; keeping {}", st.words())) };
+    let r = { let mut st = STATE.lock().unwrap(); let r = apply(&mut st, got, &rel::pin_keys(), &d, here(), now_s(), &install::os_version()); r.map_err(|e| format!("{e}; keeping {}", st.words())) };
     match r {
         Ok((changed, w)) => { eprintln!("kicad: pins: {w}"); if changed { super::ipc::publish_cad(hub).await; hub.bump_views(); } }
         Err(e) => eprintln!("kicad: pins: {e}"),
@@ -282,8 +282,8 @@ mod tests {
         assert!(open(&good(4), &[]).unwrap_err().contains("no update key"));
     }
     #[test] fn the_release_key_trusts_no_document_signed_elsewhere() {
-        assert!(open(&seal(&body(4, 2_000_000_000, serde_json::json!({})), &pair(3), "6c899f869be656d3"), &rel::keys()).unwrap_err().contains("does not match"));
-        assert!(open(&good(4), &rel::keys()).unwrap_err().contains("does not trust"));
+        assert!(open(&seal(&body(4, 2_000_000_000, serde_json::json!({})), &pair(3), "6c899f869be656d3"), &rel::pin_keys()).unwrap_err().contains("does not match"));
+        assert!(open(&good(4), &rel::pin_keys()).unwrap_err().contains("does not trust"));
     }
     #[test] fn a_release_manifest_and_a_pin_document_never_pass_as_each_other() {
         // the same key signs both: the kind keeps them apart
