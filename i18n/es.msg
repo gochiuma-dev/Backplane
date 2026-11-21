@@ -4290,11 +4290,11 @@ fork.edge.https = Las cabeceras solo se envían a una dirección https.
 fork.edge.button = Cabeceras
 fork.edge.title = Cabeceras para {hub}
 fork.edge.count = Cabeceras definidas: {n}
-fork.edge.desk.head = Edge proxy headers
-fork.edge.desk.note = Optional, for a hub behind an access proxy (a Cloudflare Access service token). Sent only over https, only to this hub's own address. Kept in this device's settings folder, readable by you only.
-fork.edge.desk.keep = Value (blank keeps the saved one)
-fork.edge.desk.https = Edge proxy headers are only sent to an https address.
-fork.edge.desk.save = The headers could not be saved here.
+fork.edge.desk.head = Cabeceras del proxy de acceso
+fork.edge.desk.note = Opcional, para un hub detrás de un proxy de acceso (un token de servicio de Cloudflare Access). Solo se envían por https y solo a la dirección de este hub. Se guardan en la carpeta de ajustes de este dispositivo, legibles solo por ti.
+fork.edge.desk.keep = Valor (en blanco conserva el guardado)
+fork.edge.desk.https = Las cabeceras del proxy de acceso solo se envían a una dirección https.
+fork.edge.desk.save = No se pudieron guardar las cabeceras aquí.
 # ---- end ----
 # the sidebar's sections (docs/ALWAYS-ON.md section 8): the hub's words, and the window's
 sidebar.sections.needs = Te necesita
